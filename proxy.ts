@@ -16,5 +16,9 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api/auth|login|_next/static|_next/image|favicon.ico).*)"],
+  // manifest/icones exclus : doivent rester accessibles sans session pour
+  // que "Ajouter a l'ecran d'accueil" fonctionne aussi depuis /login.
+  matcher: [
+    "/((?!api/auth|login|_next/static|_next/image|favicon.ico|manifest.webmanifest|icon-192.png|icon-512.png|apple-icon.png).*)",
+  ],
 };

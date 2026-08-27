@@ -1,6 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
+import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeToggle } from "@/components/theme-toggle";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -16,17 +18,38 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Snifary",
   description: "Ta bibliotheque de parfums personnelle",
+  icons: {
+    icon: ["/icon-192.png", "/icon-512.png"],
+    apple: "/apple-icon.png",
+  },
+  // "Ajouter a l'ecran d'accueil" en plein ecran, sans chrome Safari.
+  appleWebApp: {
+    capable: true,
+    title: "Snifary",
+    statusBarStyle: "black-translucent",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#c9b896" },
+    { media: "(prefers-color-scheme: dark)", color: "#2f1a2e" },
+  ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="fr"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        {children}
-        <Toaster />
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          {children}
+          <ThemeToggle />
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );
