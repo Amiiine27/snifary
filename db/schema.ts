@@ -44,6 +44,31 @@ export const perfumes = sqliteTable(
 );
 
 // ---------------------------------------------------------------------------
+// fragrantica_reference : jeu de donnees Fragrantica importe une fois depuis
+// un dataset public (pas de scraping en masse, voir roadmap.md section 5).
+// Sert uniquement a la recherche a l'ajout (voir searchFragranticaCandidatesAction
+// et resolvePerfumeAction dans lib/actions/perfumes.ts) : tant qu'un
+// utilisateur n'a pas choisi puis confirme une fiche, rien n'est ecrit dans
+// `perfumes`. Une ligne ici ne devient jamais un parfum par elle-meme.
+// ---------------------------------------------------------------------------
+export const fragranticaReference = sqliteTable(
+  "fragrantica_reference",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    fragranticaUrl: text("fragrantica_url").notNull().unique(),
+    name: text("name").notNull(),
+    brand: text("brand").notNull(),
+    gender: text("gender", { enum: ["homme", "femme", "unisexe"] }).notNull().default("unisexe"),
+    notesTop: text("notes_top"), // liste separee par virgules, comme ManualForm
+    notesHeart: text("notes_heart"),
+    notesBase: text("notes_base"),
+  },
+  (table) => [
+    check("fragrantica_reference_gender_check", sql`${table.gender} IN ('homme', 'femme', 'unisexe')`),
+  ]
+);
+
+// ---------------------------------------------------------------------------
 // notes : referentiel des notes olfactives (bergamote, vanille, ...), chaque
 // note n'existe qu'une seule fois pour permettre le filtrage transverse.
 // ---------------------------------------------------------------------------

@@ -9,6 +9,7 @@ import {
   collectionItems,
   wishlists,
   wishlistItems,
+  fragranticaReference,
 } from "@/db/schema";
 import { cloudinaryUrl } from "@/lib/cloudinary";
 
@@ -95,6 +96,27 @@ export async function findPerfumesByName(query: string): Promise<PerfumeCard[]> 
 
 export async function findPerfumeByFragranticaUrl(url: string) {
   const [row] = await db.select().from(perfumes).where(eq(perfumes.fragranticaUrl, url));
+  return row ?? null;
+}
+
+// fragrantica_reference : dataset public importe une fois (voir db/schema.ts),
+// sert uniquement de source de recherche pour l'ajout -- une ligne trouvee ici
+// n'est jamais ecrite dans `perfumes` tant que l'utilisateur n'a pas confirme
+// (voir resolvePerfumeAction / savePerfumeAction dans lib/actions/perfumes.ts).
+export type ReferenceCandidate = { url: string; title: string };
+
+export async function searchFragranticaReference(query: string): Promise<ReferenceCandidate[]> {
+  const term = `%${query.trim()}%`;
+  const rows = await db
+    .select()
+    .from(fragranticaReference)
+    .where(or(like(fragranticaReference.name, term), like(fragranticaReference.brand, term)))
+    .limit(15);
+  return rows.map((r) => ({ url: r.fragranticaUrl, title: `${r.name} — ${r.brand}` }));
+}
+
+export async function findReferenceByUrl(url: string) {
+  const [row] = await db.select().from(fragranticaReference).where(eq(fragranticaReference.fragranticaUrl, url));
   return row ?? null;
 }
 

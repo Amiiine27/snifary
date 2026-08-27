@@ -105,6 +105,13 @@ schema actuel suffit toujours.
 - **`feedback`** — avis envoyes depuis l'app. `username`/`email` sont
   **snapshotes** a l'envoi (pas de FK relationnelle vers `user` pour l'affichage),
   `message` avec CHECK `length >= 20`
+- **`fragrantica_reference`** — dataset public (Kaggle, voir section Scraping)
+  importe une fois via script ponctuel, **pas de FK vers `perfumes`**. Sert
+  uniquement de source de recherche a l'ajout : id, `fragranticaUrl` (unique),
+  name, brand, gender (enum, CHECK), notesTop/notesHeart/notesBase (texte,
+  separes par virgules comme `ManualForm`). Une ligne ici ne devient un
+  parfum dans `perfumes` que si un utilisateur la choisit puis confirme
+  (`resolvePerfumeAction`/`savePerfumeAction`) — jamais automatiquement.
 
 Migrations : `drizzle/*.sql` + `drizzle/meta/`. **Attention** : `drizzle-kit
 push` a deja echoue une fois sur Turso pour un `ALTER TABLE ADD COLUMN NOT
@@ -185,6 +192,51 @@ statique cote serveur (microdonnees schema.org exploitables directement) :
 3. Chaque fetch est borne a 6s (`AbortSignal.timeout`) pour echouer proprement
    plutot que de bloquer la recherche indefiniment.
 
+**`fragrantica_reference` (dataset local, prioritaire sur le scraping live)** :
+tentative de peuplement en masse du catalogue (5 marques, ~100 parfums) —
+stoppee en cours de route en se rendant compte qu'elle violait la propre
+regle du projet ("jamais en masse", roadmap.md section 5) et le `robots.txt`
+de fragrantica.com (`Disallow: ClaudeBot`, `Content-Signal: ai-train=no`).
+DuckDuckGo a aussi banni l'IP en cours de route (`anomaly` persistant >6min),
+rendant `searchFragrantica` inutilisable en pratique ce jour-la. Solution
+retenue : l'utilisateur a fourni deux datasets Kaggle publics (telechargement
+direct via `curl`, pas de scraping) —`ayushghawana/perfume-dataset` (brand/
+name/type/audience, utilise pour peupler ~106 fiches Dior/LV/JPG/YSL/Givenchy
+avec notes+prix de memoire) puis `olgagmiufana1/fragrantica-com-fragrance-dataset`
+(`fra_cleaned.csv`, ~24k parfums **toutes marques confondues**, avec vraies
+notes top/middle/base issues de Fragrantica) importe integralement dans
+`fragrantica_reference`. Decision finale de l'utilisateur : **ne plus jamais
+peupler `perfumes` en masse** — `fragrantica_reference` sert uniquement de
+source de recherche cote `searchFragranticaCandidatesAction`/
+`resolvePerfumeAction`, une ligne n'entre dans `perfumes` que si un
+utilisateur la choisit et confirme, exactement comme le flux de scraping live
+qu'elle complete. `resolvePerfumeAction` verifie ce dataset local **avant**
+de tenter un scrape reseau (fiable, notes deja connues, aucune latence) ; le
+scraping live (`scrapeFragranticaPerfume`) ne reste utilise qu'en dernier
+recours pour un parfum absent du dataset (recent, ou marque non couverte).
+Noms reconstruits depuis les slugs d'URL (accents perdus, ex. "Le Jour Se
+Leve" au lieu de "Lève") — limite connue et acceptee du dataset, pas un bug.
+Script d'import ponctuel supprime apres usage (meme convention que les
+scripts de migration Drizzle, voir plus haut) ; le CSV source vit hors repo.
+
+**Image Wikipedia en filet de secours (`lib/wikipedia.ts`)** : les fiches
+resolues via `fragrantica_reference` n'ont jamais d'image. `savePerfumeAction`
+tente donc Wikipedia (API MediaWiki publique, pas de souci ToS) uniquement
+quand `draft.imageUrl` est deja `null`. **Volontairement tres restrictif**
+suite a des faux positifs constates en test : une premiere version cherchait
+aussi `"{brand} {name}"` et le nom seul, ce qui a attrape l'article de la
+lettre de l'alphabet "Y" pour le parfum YSL "Y", une photo d'Audrey Hepburn
+pour Givenchy "L'Interdit" (le parfum lui rend hommage, mais l'image n'est
+pas un flacon), et le flacon d'"Eau Sauvage" (parfum Dior different et plus
+ancien) pour "Sauvage" via une redirection Wikipedia. Design retenu : titre
+exact `"{name} (perfume)"` uniquement, **aucune redirection suivie** (`prop=
+redirects` absent volontairement, une redirection = article sur un AUTRE
+parfum la plupart du temps), page exigee categorisee perfume/fragrance/
+cologne, image exigee hebergee sur Wikimedia Commons (jamais un fichier
+"fair use" local a en.wikipedia.org). Resultat : taux de succes faible
+(~10-15% en test manuel) mais aucun faux positif observe — mieux vaut ne pas
+trouver d'image que d'en attribuer une fausse a la mauvaise fiche.
+
 **Saisons/jour-nuit NON scrapables** : le widget "When To Wear" de Fragrantica
 (`<seasons-rating-new>`) est rendu 100% cote client par Vue, aucune donnee
 dans le HTML statique (verifie en profondeur, y compris apres scroll/lazy-load).
@@ -202,14 +254,18 @@ Snifary, mais a garder en tete si on refait du scraping cible sur ce site.
 `components/add-perfume-dialog.tsx`, ouvert par `components/add-fab.tsx`) :
 
 1. `searchLocalPerfumesAction` (cache Turso, quasi instantane) et
-   `searchFragranticaCandidatesAction` (DuckDuckGo, plus lent) tournent en
-   **parallele independant** cote UI (deux `useEffect` separes) : le cache
-   local s'affiche tout de suite, un echec/lenteur reseau sur le second
-   n'affecte jamais le premier. **Piege deja corrige** : sans try/catch autour
-   de l'appel, un echec reseau laissait le spinner "Recherche..." tourner
-   indefiniment (ressemblait a "l'app est cassee").
+   `searchFragranticaCandidatesAction` tournent en **parallele independant**
+   cote UI (deux `useEffect` separes) : le cache local s'affiche tout de
+   suite, un echec/lenteur reseau sur le second n'affecte jamais le premier.
+   **Piege deja corrige** : sans try/catch autour de l'appel, un echec reseau
+   laissait le spinner "Recherche..." tourner indefiniment (ressemblait a
+   "l'app est cassee"). En interne, `searchFragranticaCandidatesAction`
+   interroge `fragrantica_reference` (local, fiable) ET DuckDuckGo (`.catch`
+   -> `[]` si indisponible) en parallele, fusionne par URL.
 2. `resolvePerfumeAction(url)` : cache hit (`findPerfumeByFragranticaUrl`) ->
-   id direct, sinon scrape -> brouillon **jamais ecrit en base** a ce stade.
+   id direct ; sinon `fragrantica_reference` (notes deja connues, pas de
+   reseau) ; sinon scrape live en dernier recours -> brouillon **jamais
+   ecrit en base** a ce stade.
 3. L'utilisateur confirme/corrige (prix, contenance, concentration, genre,
    tags) -> `savePerfumeAction` est le **seul moment d'ecriture** (upload
    Cloudinary de l'image Fragrantica via `uploadImageFromUrl`, insertion

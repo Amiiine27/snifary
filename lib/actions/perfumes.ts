@@ -5,9 +5,20 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { perfumes, notes, perfumeNotes, perfumeTags } from "@/db/schema";
 import { requireUser } from "@/lib/session";
-import { searchFragrantica, scrapeFragranticaPerfume, type ScrapedPerfume } from "@/lib/fragrantica";
+import {
+  searchFragrantica,
+  scrapeFragranticaPerfume,
+  type ScrapedPerfume,
+  type FragranticaCandidate,
+} from "@/lib/fragrantica";
 import { uploadImageFromUrl, uploadImageFromBuffer } from "@/lib/cloudinary";
-import { findPerfumesByName, findPerfumeByFragranticaUrl } from "@/lib/perfumes";
+import { findWikipediaPerfumeImage } from "@/lib/wikipedia";
+import {
+  findPerfumesByName,
+  findPerfumeByFragranticaUrl,
+  searchFragranticaReference,
+  findReferenceByUrl,
+} from "@/lib/perfumes";
 
 type Gender = "homme" | "femme" | "unisexe";
 type Concentration = "edt" | "edp" | "parfum" | "extrait" | "cologne" | null;
@@ -23,28 +34,44 @@ export async function searchLocalPerfumesAction(query: string) {
   return findPerfumesByName(trimmed);
 }
 
-// Etape 1b : propose des fiches Fragrantica non encore connues. Isolee dans
-// sa propre action pour qu'un echec ou une lenteur reseau n'empeche pas
-// d'afficher les resultats locaux.
+// Etape 1b : propose des fiches Fragrantica non encore connues. Deux sources
+// combinees : le dataset public importe dans `fragrantica_reference` (fiable,
+// pas de reseau) et la recherche live DuckDuckGo->Fragrantica (moins fiable,
+// voir lib/fragrantica.ts) -- un echec de la seconde ne doit jamais empecher
+// la premiere de repondre. Isolee dans sa propre action pour qu'une lenteur
+// reseau n'empeche pas d'afficher les resultats locaux (searchLocalPerfumesAction).
 export async function searchFragranticaCandidatesAction(query: string) {
   await requireUser();
   const trimmed = query.trim();
   if (trimmed.length < 2) return [];
 
-  const candidates = await searchFragrantica(trimmed);
+  const [referenceCandidates, liveCandidates] = await Promise.all([
+    searchFragranticaReference(trimmed),
+    searchFragrantica(trimmed).catch(() => []),
+  ]);
+
+  const seen = new Set<string>();
+  const merged: FragranticaCandidate[] = [];
+  for (const c of [...referenceCandidates, ...liveCandidates]) {
+    if (seen.has(c.url)) continue;
+    seen.add(c.url);
+    merged.push(c);
+  }
 
   const knownUrls = new Set(
-    (await Promise.all(candidates.map((c) => findPerfumeByFragranticaUrl(c.url))))
+    (await Promise.all(merged.map((c) => findPerfumeByFragranticaUrl(c.url))))
       .filter(Boolean)
       .map((p) => p!.fragranticaUrl)
   );
 
-  return candidates.filter((c) => !knownUrls.has(c.url));
+  return merged.filter((c) => !knownUrls.has(c.url)).slice(0, 20);
 }
 
-// Etape 2 : l'utilisateur choisit une fiche Fragrantica precise. Cache hit ->
-// renvoie le parfum existant directement. Sinon on scrape et on renvoie un
-// brouillon a valider (rien n'est ecrit en base a ce stade).
+// Etape 2 : l'utilisateur choisit une fiche precise. Cache hit -> renvoie le
+// parfum existant directement. Sinon, priorite au dataset local (fiable,
+// notes deja connues, pas de reseau) ; en dernier recours seulement, scraping
+// live de Fragrantica. Dans tous les cas rien n'est ecrit en base ici -- seul
+// savePerfumeAction (etape 3, apres confirmation utilisateur) ecrit.
 export async function resolvePerfumeAction(
   fragranticaUrl: string
 ): Promise<{ existingId: number } | { draft: ScrapedPerfume }> {
@@ -53,8 +80,34 @@ export async function resolvePerfumeAction(
   const existing = await findPerfumeByFragranticaUrl(fragranticaUrl);
   if (existing) return { existingId: existing.id };
 
+  const reference = await findReferenceByUrl(fragranticaUrl);
+  if (reference) {
+    return {
+      draft: {
+        name: reference.name,
+        brand: reference.brand,
+        gender: reference.gender,
+        imageUrl: null,
+        fragranticaUrl: reference.fragranticaUrl,
+        notes: {
+          top: splitNotesList(reference.notesTop),
+          heart: splitNotesList(reference.notesHeart),
+          base: splitNotesList(reference.notesBase),
+        },
+      },
+    };
+  }
+
   const draft = await scrapeFragranticaPerfume(fragranticaUrl);
   return { draft };
+}
+
+function splitNotesList(value: string | null): string[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((n) => n.trim())
+    .filter(Boolean);
 }
 
 export type SavePerfumeInput = {
@@ -74,9 +127,14 @@ export async function savePerfumeAction(input: SavePerfumeInput): Promise<number
   const existing = await findPerfumeByFragranticaUrl(input.draft.fragranticaUrl);
   if (existing) return existing.id;
 
-  const imagePublicId = input.draft.imageUrl
-    ? await uploadImageFromUrl(input.draft.imageUrl, "perfumes")
-    : null;
+  // Le dataset local (fragrantica_reference) n'a jamais d'image : on tente
+  // Wikipedia en filet de secours uniquement dans ce cas. Best-effort, ne
+  // doit jamais faire echouer l'ajout si indisponible.
+  const imageSourceUrl =
+    input.draft.imageUrl ??
+    (await findWikipediaPerfumeImage(input.draft.name).catch(() => null));
+
+  const imagePublicId = imageSourceUrl ? await uploadImageFromUrl(imageSourceUrl, "perfumes") : null;
 
   return insertPerfumeRow({
     name: input.draft.name,
