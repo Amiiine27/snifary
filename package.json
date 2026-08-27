@@ -13,7 +13,6 @@
     "@imgly/background-removal": "^1.7.0",
     "@libsql/client": "^0.17.4",
     "better-auth": "^1.7.2",
-    "cheerio": "^1.2.0",
     "class-variance-authority": "^0.7.1",
     "cloudinary": "^2.10.1",
     "clsx": "^2.1.1",

@@ -108,7 +108,7 @@ export async function findPerfumeByFragranticaUrl(url: string) {
 // sert uniquement de source de recherche pour l'ajout -- une ligne trouvee ici
 // n'est jamais ecrite dans `perfumes` tant que l'utilisateur n'a pas confirme
 // (voir resolvePerfumeAction / savePerfumeAction dans lib/actions/perfumes.ts).
-export type ReferenceCandidate = { url: string; title: string };
+export type ReferenceCandidate = { url: string; name: string; brand: string; imageUrl: string | null };
 
 export async function searchFragranticaReference(query: string): Promise<ReferenceCandidate[]> {
   const term = `%${query.trim()}%`;
@@ -117,7 +117,12 @@ export async function searchFragranticaReference(query: string): Promise<Referen
     .from(fragranticaReference)
     .where(or(like(fragranticaReference.name, term), like(fragranticaReference.brand, term)))
     .limit(15);
-  return rows.map((r) => ({ url: r.fragranticaUrl, title: `${r.name} — ${r.brand}` }));
+  return rows.map((r) => ({
+    url: r.fragranticaUrl,
+    name: r.name,
+    brand: r.brand,
+    imageUrl: fimgsImageUrl(r.fragranticaUrl),
+  }));
 }
 
 export async function findReferenceByUrl(url: string) {

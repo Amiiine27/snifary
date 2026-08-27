@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Search, Loader2, AlertCircle, Plus, Upload } from "lucide-react";
-import type { PerfumeCard as PerfumeCardData } from "@/lib/perfumes";
+import type { PerfumeCard as PerfumeCardData, ReferenceCandidate } from "@/lib/perfumes";
 import {
   searchLocalPerfumesAction,
   searchFragranticaCandidatesAction,
@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ReferencePerfumeThumb } from "@/components/reference-perfume-thumb";
 import {
   Select,
   SelectContent,
@@ -31,8 +32,15 @@ import {
 } from "@/components/ui/select";
 
 type Target = { kind: "collection" } | { kind: "wishlist"; wishlistId: number };
-type FragranticaCandidate = { url: string; title: string };
 type View = "search" | "manual";
+
+// Une seule liste fusionnee (plus de distinction visuelle "Deja dans
+// Snifary" / "Sur Fragrantica", voir PROJECT.md) : le dataset local a
+// desormais nom/marque/notes ET image (fimgs.net) pour la quasi-totalite des
+// parfums, la separation n'apportait plus rien.
+type UnifiedResult =
+  | { kind: "existing"; id: number; name: string; brand: string; imageUrl: string | null }
+  | { kind: "candidate"; url: string; name: string; brand: string; imageUrl: string | null };
 
 const TAG_OPTIONS = [
   { value: "printemps", label: "Printemps" },
@@ -66,7 +74,7 @@ export function AddPerfumeDialog({
   const [localResults, setLocalResults] = useState<PerfumeCardData[] | null>(null);
   const [localSearching, setLocalSearching] = useState(false);
 
-  const [remoteResults, setRemoteResults] = useState<FragranticaCandidate[] | null>(null);
+  const [remoteResults, setRemoteResults] = useState<ReferenceCandidate[] | null>(null);
   const [remoteSearching, setRemoteSearching] = useState(false);
   const [remoteError, setRemoteError] = useState<string | null>(null);
 
@@ -96,8 +104,8 @@ export function AddPerfumeDialog({
     };
   }, [query, open, view, queryTooShort]);
 
-  // Recherche Fragrantica : plus lente et moins fiable (reseau externe), a
-  // part pour ne jamais bloquer l'affichage des resultats locaux ci-dessus.
+  // Recherche dans le dataset local (fragrantica_reference) : a part pour ne
+  // jamais bloquer l'affichage des resultats deja enregistres ci-dessus.
   useEffect(() => {
     if (!open || view !== "search" || queryTooShort) return;
     let cancelled = false;
@@ -189,6 +197,11 @@ export function AddPerfumeDialog({
   // d'ajouter la seconde variante sans repartir d'une recherche differente.
   const canAddManually = !queryTooShort && !localSearching && !remoteSearching;
 
+  const merged: UnifiedResult[] = [
+    ...(localResults ?? []).map((p) => ({ kind: "existing" as const, id: p.id, name: p.name, brand: p.brand, imageUrl: p.imageUrl })),
+    ...(remoteResults ?? []).map((c) => ({ kind: "candidate" as const, url: c.url, name: c.name, brand: c.brand, imageUrl: c.imageUrl })),
+  ];
+
   return (
     <Dialog
       open={open}
@@ -218,23 +231,23 @@ export function AddPerfumeDialog({
               />
             </div>
 
-            {localResults && localResults.length > 0 && (
-              <ResultGroup title="Deja dans Snifary">
-                {localResults.map((p) => (
-                  <ResultRow
-                    key={p.id}
-                    title={p.name}
-                    subtitle={p.brand}
-                    disabled={pending}
-                    onClick={() => handlePickExisting(p.id)}
-                  />
-                ))}
-              </ResultGroup>
-            )}
-
             {!queryTooShort && (
-              <ResultGroup title="Sur Fragrantica">
-                {remoteSearching && (
+              <div className="space-y-1.5">
+                {merged.length > 0 && (
+                  <div className="flex flex-col gap-1.5">
+                    {merged.map((r) => (
+                      <ResultRow
+                        key={r.kind === "existing" ? `p${r.id}` : r.url}
+                        name={r.name}
+                        brand={r.brand}
+                        imageUrl={r.imageUrl}
+                        disabled={pending}
+                        onClick={() => (r.kind === "existing" ? handlePickExisting(r.id) : handlePickCandidate(r.url))}
+                      />
+                    ))}
+                  </div>
+                )}
+                {(localSearching || remoteSearching) && (
                   <p className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="size-4 animate-spin" /> Recherche...
                   </p>
@@ -244,18 +257,10 @@ export function AddPerfumeDialog({
                     <AlertCircle className="size-4" /> {remoteError}
                   </p>
                 )}
-                {remoteResults?.map((c) => (
-                  <ResultRow
-                    key={c.url}
-                    title={c.title}
-                    disabled={pending}
-                    onClick={() => handlePickCandidate(c.url)}
-                  />
-                ))}
-                {remoteResults?.length === 0 && !remoteSearching && !remoteError && (
+                {merged.length === 0 && !localSearching && !remoteSearching && !remoteError && (
                   <p className="text-sm text-muted-foreground">Aucun resultat</p>
                 )}
-              </ResultGroup>
+              </div>
             )}
 
             {canAddManually && (
@@ -293,23 +298,16 @@ export function AddPerfumeDialog({
   );
 }
 
-function ResultGroup({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
-      <div className="flex flex-col gap-1.5">{children}</div>
-    </div>
-  );
-}
-
 function ResultRow({
-  title,
-  subtitle,
+  name,
+  brand,
+  imageUrl,
   onClick,
   disabled,
 }: {
-  title: string;
-  subtitle?: string;
+  name: string;
+  brand: string;
+  imageUrl: string | null;
   onClick: () => void;
   disabled?: boolean;
 }) {
@@ -317,10 +315,13 @@ function ResultRow({
     <button
       onClick={onClick}
       disabled={disabled}
-      className="rounded-lg border border-border p-2.5 text-left text-sm transition-colors hover:bg-muted disabled:opacity-50"
+      className="flex items-center gap-3 rounded-lg border border-border p-2.5 text-left transition-colors hover:bg-muted disabled:opacity-50"
     >
-      <p className="font-medium">{title}</p>
-      {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
+      <ReferencePerfumeThumb imageUrl={imageUrl} name={name} className="size-12 shrink-0" iconClassName="size-5" />
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium">{name}</p>
+        <p className="truncate text-xs text-muted-foreground">{brand}</p>
+      </div>
     </button>
   );
 }

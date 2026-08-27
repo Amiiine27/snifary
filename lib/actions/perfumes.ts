@@ -7,13 +7,7 @@ import { perfumes, notes, perfumeNotes, perfumeTags, collectionItems } from "@/d
 import { guessConcentration } from "@/lib/concentration";
 import { splitNotesList } from "@/lib/notes";
 import { requireUser } from "@/lib/session";
-import {
-  searchFragrantica,
-  scrapeFragranticaPerfume,
-  findFimgsImage,
-  type ScrapedPerfume,
-  type FragranticaCandidate,
-} from "@/lib/fragrantica";
+import { findFimgsImage, type ScrapedPerfume } from "@/lib/fragrantica";
 import { uploadImageFromUrl, uploadImageFromBuffer } from "@/lib/cloudinary";
 import { findWikipediaPerfumeInfo } from "@/lib/wikipedia";
 import { findOpenBeautyFactsImage } from "@/lib/openbeautyfacts";
@@ -27,6 +21,7 @@ import {
   getUserGenderPreference,
   getSimilarPerfumes,
   type SimilarPerfumeSource,
+  type ReferenceCandidate,
 } from "@/lib/perfumes";
 import { addItemToWishlistAction } from "@/lib/actions/wishlists";
 
@@ -69,43 +64,35 @@ export async function refreshDiscoverPerfumesAction() {
   return getDiscoverPerfumes(user.id, gender, 30);
 }
 
-// Etape 1b : propose des fiches Fragrantica non encore connues. Deux sources
-// combinees : le dataset public importe dans `fragrantica_reference` (fiable,
-// pas de reseau) et la recherche live DuckDuckGo->Fragrantica (moins fiable,
-// voir lib/fragrantica.ts) -- un echec de la seconde ne doit jamais empecher
-// la premiere de repondre. Isolee dans sa propre action pour qu'une lenteur
-// reseau n'empeche pas d'afficher les resultats locaux (searchLocalPerfumesAction).
-export async function searchFragranticaCandidatesAction(query: string) {
+// Etape 1b : propose des fiches du dataset local non encore connues. Le
+// scraping live DuckDuckGo->Fragrantica a ete retire (fragrantica.com est
+// desormais derriere un vrai challenge Cloudflare, voir lib/fragrantica.ts) --
+// le dataset `fragrantica_reference` (~24k parfums, notes + image via
+// fimgs.net) suffit maintenant a lui seul pour l'immense majorite des
+// recherches. Exclut les candidats deja enregistres (`perfumes`) : ils
+// remontent deja via searchLocalPerfumesAction, pas la peine de les montrer
+// deux fois dans une liste desormais fusionnee cote UI (plus de distinction
+// visuelle "deja dans Snifary" / "sur Fragrantica").
+export async function searchFragranticaCandidatesAction(query: string): Promise<ReferenceCandidate[]> {
   await requireUser();
   const trimmed = query.trim();
   if (trimmed.length < 2) return [];
 
-  const [referenceCandidates, liveCandidates] = await Promise.all([
-    searchFragranticaReference(trimmed),
-    searchFragrantica(trimmed).catch(() => []),
-  ]);
-
-  const seen = new Set<string>();
-  const merged: FragranticaCandidate[] = [];
-  for (const c of [...referenceCandidates, ...liveCandidates]) {
-    if (seen.has(c.url)) continue;
-    seen.add(c.url);
-    merged.push(c);
-  }
+  const candidates = await searchFragranticaReference(trimmed);
 
   const knownUrls = new Set(
-    (await Promise.all(merged.map((c) => findPerfumeByFragranticaUrl(c.url))))
+    (await Promise.all(candidates.map((c) => findPerfumeByFragranticaUrl(c.url))))
       .filter(Boolean)
       .map((p) => p!.fragranticaUrl)
   );
 
-  return merged.filter((c) => !knownUrls.has(c.url)).slice(0, 20);
+  return candidates.filter((c) => !knownUrls.has(c.url)).slice(0, 20);
 }
 
 // Etape 2 : l'utilisateur choisit une fiche precise. Cache hit -> renvoie le
-// parfum existant directement. Sinon, priorite au dataset local (fiable,
-// notes deja connues, pas de reseau) ; en dernier recours seulement, scraping
-// live de Fragrantica. Dans tous les cas rien n'est ecrit en base ici -- seul
+// parfum existant directement. Sinon, resolution via le dataset local (seule
+// source restante, plus de scraping live en dernier recours -- voir
+// searchFragranticaCandidatesAction). Rien n'est ecrit en base ici -- seul
 // savePerfumeAction (etape 3, apres confirmation utilisateur) ecrit.
 export async function resolvePerfumeAction(
   fragranticaUrl: string
@@ -116,25 +103,22 @@ export async function resolvePerfumeAction(
   if (existing) return { existingId: existing.id };
 
   const reference = await findReferenceByUrl(fragranticaUrl);
-  if (reference) {
-    return {
-      draft: {
-        name: reference.name,
-        brand: reference.brand,
-        gender: reference.gender,
-        imageUrl: null,
-        fragranticaUrl: reference.fragranticaUrl,
-        notes: {
-          top: splitNotesList(reference.notesTop),
-          heart: splitNotesList(reference.notesHeart),
-          base: splitNotesList(reference.notesBase),
-        },
-      },
-    };
-  }
+  if (!reference) throw new Error("Parfum introuvable");
 
-  const draft = await scrapeFragranticaPerfume(fragranticaUrl);
-  return { draft };
+  return {
+    draft: {
+      name: reference.name,
+      brand: reference.brand,
+      gender: reference.gender,
+      imageUrl: null,
+      fragranticaUrl: reference.fragranticaUrl,
+      notes: {
+        top: splitNotesList(reference.notesTop),
+        heart: splitNotesList(reference.notesHeart),
+        base: splitNotesList(reference.notesBase),
+      },
+    },
+  };
 }
 
 export type SavePerfumeInput = {

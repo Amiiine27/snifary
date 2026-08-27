@@ -166,66 +166,71 @@ npx dotenv-cli -e .env.local -- npx drizzle-kit push
 
 ## Scraping Fragrantica (`lib/fragrantica.ts`)
 
-Fragrantica sert sa page de recherche cote client (Algolia + JS) : un fetch
-serveur n'y voit aucun resultat. **Resolution du nom -> URL** se fait donc via
-`html.duckduckgo.com/html/` (`site:fragrantica.com/perfume {query}`, HTML
-statique), extraction des vraies URLs via le parametre `uddg` des liens
-(selecteur `a.result__a`). Une fois l'URL Fragrantica connue, la fiche EST
-statique cote serveur (microdonnees schema.org exploitables directement) :
+**Le scraping live de fragrantica.com a ete entierement retire** (recherche
+DuckDuckGo -> HTML -> extraction cheerio). Historiquement, la resolution nom
+-> URL passait par `html.duckduckgo.com/html/` (Fragrantica sert sa page de
+recherche cote client, Algolia + JS, invisible a un fetch serveur), puis la
+fiche elle-meme etait scrapee (microdonnees schema.org). Deux problemes
+distincts rendaient deja ca fragile : DuckDuckGo pouvait renvoyer une page
+"anomaly" (rate-limit) apres usage repete depuis la meme IP, et le `fetch()`
+de Node (undici) recevait un 403 systematique de Cloudflare sur
+`fragrantica.com` (signature TLS differente de `curl`, qui passait). **Le
+coup de grace** : en reinvestiguant pour la recherche d'images (voir plus
+bas), un test direct a montre que fragrantica.com sert desormais un vrai
+challenge Cloudflare **JS** (`Cf-Mitigated: challenge`, page "Just a
+moment...") meme via `curl` — plus contournable du tout, y compris depuis
+Vercel. `lib/fragrantica.ts` ne contient donc plus que `fimgsImageUrl`/
+`findFimgsImage` (le CDN images, voir plus bas) ; `searchFragrantica`,
+`scrapeFragranticaPerfume` et le type `FragranticaCandidate` ont ete
+supprimes plutot que laisses en code mort inatteignable.
 
-- nom : `h1[itemprop="name"]` (cloner, retirer le `<span>` enfant, puis retirer
-  le nom de marque en suffixe s'il apparait)
-- marque : `p[itemprop="brand"] span[itemprop="name"]`
-- genre : texte du `<span>` dans le h1 (`"for men"` / `"for women"` / `"for
-  women and men"`). **Piege deja corrige** : `"for women"` contient
-  litteralement la sous-chaine `"men"` (wo-**men**) — un double `.includes()`
-  naif classe tout parfum femme en unisexe. Detection correcte : `includes("and")`
-  -> unisexe, sinon `includes("women")` -> femme, sinon `/\bmen\b/` -> homme.
-- image : `img[itemprop="image"]` (attribut `src`)
-- notes : balises custom `<pyramid-level-new notes="top|middle|base">` ->
-  `.pyramid-note-label` (attention : Fragrantica dit "middle", nous disons
-  "heart" en base ; mapper explicitement)
+**`fragrantica_reference` (dataset local) est donc devenue la seule source
+de recherche/resolution**, plus une simple priorite sur un scraping live
+desormais impossible. Tentative initiale de peuplement en masse du catalogue
+(5 marques, ~100 parfums) — stoppee en se rendant compte qu'elle violait la
+propre regle du projet ("jamais en masse", `roadmap.md` section 5) et le
+`robots.txt` de fragrantica.com (`Disallow: ClaudeBot`,
+`Content-Signal: ai-train=no`). Solution retenue : l'utilisateur a fourni
+deux datasets Kaggle publics (telechargement direct via `curl`, pas de
+scraping) — `ayushghawana/perfume-dataset` (brand/name/type/audience, utilise
+pour peupler ~106 fiches Dior/LV/JPG/YSL/Givenchy avec notes+prix de memoire)
+puis `olgagmiufana1/fragrantica-com-fragrance-dataset` (`fra_cleaned.csv`,
+~24k parfums **toutes marques confondues**, avec vraies notes top/middle/base
+issues de Fragrantica) importe integralement dans `fragrantica_reference`.
+Decision finale de l'utilisateur : **ne plus jamais peupler `perfumes` en
+masse** — `fragrantica_reference` sert uniquement de source de recherche
+cote `searchFragranticaCandidatesAction`/`resolvePerfumeAction`, une ligne
+n'entre dans `perfumes` que si un utilisateur la choisit et confirme.
+`resolvePerfumeAction` a desormais 2 branches seulement : cache
+(`perfumes`, id direct si deja connu), sinon `fragrantica_reference` — si
+absent des deux, `Error("Parfum introuvable")` plutot qu'un troisieme
+recours reseau. Consequence assumee : un parfum trop recent pour le
+snapshot du dataset (ex. Prada Paradigme, sorti en 2025) ou d'une marque non
+couverte n'est **plus resolvable du tout** par recherche — seule la saisie
+manuelle (`ManualForm`) reste disponible pour ce cas, ce qui etait deja la
+voie jugee fiable a long terme. Noms reconstruits depuis les slugs d'URL
+(accents perdus, ex. "Le Jour Se Leve" au lieu de "Lève") — limite connue et
+acceptee du dataset, pas un bug. Script d'import ponctuel supprime apres
+usage (meme convention que les scripts de migration Drizzle, voir plus
+haut) ; le CSV source vit hors repo.
 
-**Fiabilite reseau, deux problemes distincts rencontres :**
-1. DuckDuckGo peut renvoyer une page "anomaly" (rate-limit / detection bot)
-   apres usage repete depuis la meme IP en peu de temps.
-2. Le `fetch()` natif de Node (undici) recoit un **403 systematique** de
-   Cloudflare sur `fragrantica.com`, alors que `curl` passe sans probleme
-   depuis la meme machine — signature TLS/HTTP differente, tres probablement
-   du fingerprinting Cloudflare specifique a undici. `fetchWithTimeout()` dans
-   `lib/fragrantica.ts` ajoute des headers `Accept`/`Accept-Language` pour
-   attenuer ca, mais ce n'est **pas garanti fiable en prod** (Vercel = memes
-   IP/stack Node). D'ou l'existence du mode saisie manuelle : ce n'est pas un
-   fallback cosmetique, c'est la voie fiable a long terme.
-3. Chaque fetch est borne a 6s (`AbortSignal.timeout`) pour echouer proprement
-   plutot que de bloquer la recherche indefiniment.
-
-**`fragrantica_reference` (dataset local, prioritaire sur le scraping live)** :
-tentative de peuplement en masse du catalogue (5 marques, ~100 parfums) —
-stoppee en cours de route en se rendant compte qu'elle violait la propre
-regle du projet ("jamais en masse", roadmap.md section 5) et le `robots.txt`
-de fragrantica.com (`Disallow: ClaudeBot`, `Content-Signal: ai-train=no`).
-DuckDuckGo a aussi banni l'IP en cours de route (`anomaly` persistant >6min),
-rendant `searchFragrantica` inutilisable en pratique ce jour-la. Solution
-retenue : l'utilisateur a fourni deux datasets Kaggle publics (telechargement
-direct via `curl`, pas de scraping) —`ayushghawana/perfume-dataset` (brand/
-name/type/audience, utilise pour peupler ~106 fiches Dior/LV/JPG/YSL/Givenchy
-avec notes+prix de memoire) puis `olgagmiufana1/fragrantica-com-fragrance-dataset`
-(`fra_cleaned.csv`, ~24k parfums **toutes marques confondues**, avec vraies
-notes top/middle/base issues de Fragrantica) importe integralement dans
-`fragrantica_reference`. Decision finale de l'utilisateur : **ne plus jamais
-peupler `perfumes` en masse** — `fragrantica_reference` sert uniquement de
-source de recherche cote `searchFragranticaCandidatesAction`/
-`resolvePerfumeAction`, une ligne n'entre dans `perfumes` que si un
-utilisateur la choisit et confirme, exactement comme le flux de scraping live
-qu'elle complete. `resolvePerfumeAction` verifie ce dataset local **avant**
-de tenter un scrape reseau (fiable, notes deja connues, aucune latence) ; le
-scraping live (`scrapeFragranticaPerfume`) ne reste utilise qu'en dernier
-recours pour un parfum absent du dataset (recent, ou marque non couverte).
-Noms reconstruits depuis les slugs d'URL (accents perdus, ex. "Le Jour Se
-Leve" au lieu de "Lève") — limite connue et acceptee du dataset, pas un bug.
-Script d'import ponctuel supprime apres usage (meme convention que les
-scripts de migration Drizzle, voir plus haut) ; le CSV source vit hors repo.
+**Recherche fusionnee dans `AddPerfumeDialog`** (`components/add-perfume-dialog.tsx`) :
+plus de distinction visuelle "Deja dans Snifary" / "Sur Fragrantica" —
+`searchLocalPerfumesAction` (table `perfumes`) et
+`searchFragranticaCandidatesAction` (dataset, exclut deja les candidats dont
+l'URL correspond a un `perfumes` existant) tournent toujours en deux
+`useEffect` separes (pour que le local, quasi instantane, s'affiche sans
+attendre l'autre), mais leurs resultats sont combines en une seule liste
+`merged` cote client, chaque ligne partageant desormais `name`/`brand`/
+`imageUrl` (`ReferenceCandidate`, `lib/perfumes.ts`, image via
+`fimgsImageUrl`) — retire suite a un retour explicite : le dataset a
+desormais notes ET image pour la quasi-totalite des parfums, la separation
+n'apportait plus rien. **La recherche locale reste indispensable** (pas
+seulement fusionnee cosmetiquement) : un parfum saisi manuellement
+(`fragranticaUrl === null`, jamais dans le dataset) ou trop recent pour le
+snapshot ne serait sinon plus jamais retrouvable en recherche, cassant
+justement le cas Prada Paradigme deja corrige cette session
+(`canAddManually`, voir plus bas).
 
 **Images via le CDN Fragrantica (`fimgsImageUrl`/`findFimgsImage`,
 `lib/fragrantica.ts`) : source prioritaire, avant Open Beauty Facts et
@@ -238,8 +243,8 @@ vraies photos distinctes a chaque fois, `robots.txt` de ce sous-domaine
 n'interdisant que le crawler de la Wayback Machine. Pattern simple et
 predictible : `https://fimgs.net/mdimg/perfume/o.<id>.jpg`, ou `<id>` est le
 nombre en fin d'URL Fragrantica (ex. `Sauvage-31861.html` -> `31861`), deja
-present sur toute ligne `fragrantica_reference` ET tout parfum scrape en
-direct — aucune requete reseau supplementaire pour l'obtenir. Deux usages
+present sur toute ligne `fragrantica_reference` — aucune requete reseau
+supplementaire pour l'obtenir. Deux usages
 distincts, volontairement asymetriques : `fimgsImageUrl` (pure, pas de
 verification) sert a l'**affichage** — `toReferencePerfume` dans
 `lib/perfumes.ts` la calcule pour chaque `ReferencePerfume`, et
@@ -252,7 +257,14 @@ aller-retour reseau par carte dans une liste de 30+ resultats. `findFimgsImage`
 pour ne jamais faire echouer tout un `savePerfumeAction` sur une image
 absente. Contrairement a Open Beauty Facts/Wikipedia (matching flou par nom,
 avec les faux positifs deja rencontres ci-dessous), c'est une correspondance
-**exacte** par id — aucun risque de confondre deux parfums.
+**exacte** par id — aucun risque de confondre deux parfums. **Backfill
+ponctuel** effectue sur les `perfumes` deja en base sans image
+(`imagePublicId IS NULL AND "fragranticaUrl" IS NOT NULL`, script
+`@libsql/client` + `cloudinary.uploader.upload` ponctuel, meme convention
+que les migrations Drizzle) : seulement 6 lignes concernees a l'echelle de
+ce projet, 100% de reussite. Les nouveaux ajouts en beneficient
+automatiquement via `findImageAndDescription`, seul ce rattrapage retroactif
+etait a faire a la main une fois.
 
 **Image ET description Wikipedia en filet de secours (`lib/wikipedia.ts`,
 `findWikipediaPerfumeInfo`)** : reste utile pour la description (fimgs.net et
@@ -413,19 +425,23 @@ Snifary, mais a garder en tete si on refait du scraping cible sur ce site.
 **Flow d'ajout complet** (`lib/actions/perfumes.ts`, UI dans
 `components/add-perfume-dialog.tsx`, ouvert par `components/add-fab.tsx`) :
 
-1. `searchLocalPerfumesAction` (cache Turso, quasi instantane) et
-   `searchFragranticaCandidatesAction` tournent en **parallele independant**
-   cote UI (deux `useEffect` separes) : le cache local s'affiche tout de
-   suite, un echec/lenteur reseau sur le second n'affecte jamais le premier.
-   **Piege deja corrige** : sans try/catch autour de l'appel, un echec reseau
-   laissait le spinner "Recherche..." tourner indefiniment (ressemblait a
-   "l'app est cassee"). En interne, `searchFragranticaCandidatesAction`
-   interroge `fragrantica_reference` (local, fiable) ET DuckDuckGo (`.catch`
-   -> `[]` si indisponible) en parallele, fusionne par URL.
+1. `searchLocalPerfumesAction` (table `perfumes`, cache Turso, quasi
+   instantane) et `searchFragranticaCandidatesAction` (dataset
+   `fragrantica_reference` uniquement desormais, voir section Scraping)
+   tournent en **parallele independant** cote UI (deux `useEffect` separes) :
+   le cache local s'affiche tout de suite, une lenteur sur le second n'affecte
+   jamais le premier. **Piege deja corrige** : sans try/catch autour de
+   l'appel, un echec laissait le spinner "Recherche..." tourner indefiniment
+   (ressemblait a "l'app est cassee"). Les deux resultats sont ensuite
+   **fusionnes en une seule liste** cote client (`merged`,
+   `add-perfume-dialog.tsx`) — plus de distinction visuelle "Deja dans
+   Snifary" / "Sur Fragrantica" (voir section Scraping pour le detail et le
+   risque ecarte).
 2. `resolvePerfumeAction(url)` : cache hit (`findPerfumeByFragranticaUrl`) ->
    id direct ; sinon `fragrantica_reference` (notes deja connues, pas de
-   reseau) ; sinon scrape live en dernier recours -> brouillon **jamais
-   ecrit en base** a ce stade.
+   reseau) -> brouillon **jamais ecrit en base** a ce stade ; si absent des
+   deux, `Error("Parfum introuvable")` (plus de scrape live en dernier
+   recours, voir section Scraping).
 3. **Plus d'etape de confirmation manuelle** (ecran "Confirme les infos" +
    `ConfirmForm` supprimes) : ni le dataset local ni Fragrantica n'exposent
    prix/contenance/categories de facon fiable, donc rien de reel a faire
@@ -437,13 +453,14 @@ Snifary, mais a garder en tete si on refait du scraping cible sur ce site.
    dans `add-perfume-dialog.tsx` — repere "eau de parfum"/"eau de
    toilette"/"elixir"/"extrait"/"cologne"/"parfum" en toutes lettres, sinon
    `null`). `savePerfumeAction` reste le **seul moment d'ecriture** (upload
-   Cloudinary de l'image Fragrantica via `uploadImageFromUrl` si presente,
-   sinon tentative Wikipedia, insertion perfume + notes). Consequence
-   assumee : un parfum ajoute par recherche (dataset ou scrape, donc
+   Cloudinary de l'image trouvee — fimgs.net en priorite, voir section
+   Scraping — sinon tentative Wikipedia, insertion perfume + notes).
+   Consequence assumee : un parfum ajoute par recherche (donc
    `fragranticaUrl !== null`) n'a **pas** de bouton "Modifier" (voir point 7)
-   — impossible de lui ajouter un prix ou une photo apres coup pour
-   l'instant ; a rouvrir si ca devient genant a l'usage.
-4. Si aucun resultat (ni local ni Fragrantica) -> bouton "+ Ajouter un parfum
+   — impossible de lui ajouter un prix apres coup pour l'instant (une photo,
+   si — voir "Meme filet pour l'image" dans la section Scraping) ; a rouvrir
+   si ca devient genant a l'usage.
+4. Si aucun resultat (ni local ni dataset) -> bouton "+ Ajouter un parfum
    manuellement" -> `ManualForm` (nom, marque, image uploadee directement via
    `uploadPerfumeImageAction`, notes en champs texte separes par virgules,
    memes champs prix/contenance/concentration/genre/tags) ->
@@ -451,20 +468,23 @@ Snifary, mais a garder en tete si on refait du scraping cible sur ce site.
    Le bouton manuel n'est **plus** cache des qu'un resultat existe deja
    (`canAddManually` dans `add-perfume-dialog.tsx`, ex-`noResultsAtAll`) :
    avant, une fois un premier "Paradigme" ajoute manuellement, retaper
-   "Paradigme" le trouvait sous "Deja dans Snifary" et cachait le bouton
-   manuel, empechant d'ajouter une AUTRE variante reelle du meme nom (ex.
-   "Paradigme Le Parfum" en EDP a cote du "Paradigme" parfum) — corrige
-   suite a un cas reel rencontre par l'utilisateur. `canAddManually` ne
-   depend plus que d'une recherche valide et stabilisee (ni trop courte, ni
-   en cours de chargement local/distant), jamais du nombre de resultats.
+   "Paradigme" le trouvait dans les resultats et cachait le bouton manuel,
+   empechant d'ajouter une AUTRE variante reelle du meme nom (ex. "Paradigme
+   Le Parfum" en EDP a cote du "Paradigme" parfum) — corrige suite a un cas
+   reel rencontre par l'utilisateur. `canAddManually` ne depend plus que
+   d'une recherche valide et stabilisee (ni trop courte, ni en cours de
+   chargement local/distant), jamais du nombre de resultats. C'est aussi ce
+   cas precis qui justifie de garder la recherche locale (`perfumes`) meme
+   apres la fusion avec le dataset (voir section Scraping) : "Paradigme"
+   (sorti en 2025) n'est pas dans le dataset (snapshot ~2024), seule la
+   recherche locale le rend retrouvable.
 5. Suppression de fond (`lib/remove-background.ts`, `@imgly/background-removal`,
    modele `isnet_quint8`, 100% navigateur/WASM, import dynamique) appliquee
    **uniquement sur les images uploadees manuellement** (fichier local, pas de
-   souci CORS). Les images scrapees depuis Fragrantica ou trouvees sur Wikipedia
-   ne passent PAS par ce traitement (fetch cross-origin depuis le navigateur
-   serait fragile, et se fait de toute facon cote serveur dans
-   `savePerfumeAction` maintenant qu'il n'y a plus d'etape de confirmation
-   ou brancher un choix d'image cote client).
+   souci CORS). Les images trouvees automatiquement (fimgs.net, Wikipedia,
+   Open Beauty Facts) ne passent PAS par ce traitement (fetch cross-origin
+   depuis le navigateur serait fragile, et se fait de toute facon cote
+   serveur dans `savePerfumeAction`).
 6. Champ "Clone" dans `ManualForm` : checkbox qui, si cochee, affiche un champ
    texte libre stockant dans `perfumes.inspiredBy` le nom du parfum original
    dont ce clone/dupe s'inspire. Uniquement dans le formulaire manuel (n'a pas
@@ -812,3 +832,10 @@ projet). Si ce compte change un jour, modifier cette seule constante.
 - Ne pas oublier `requireUser()` + filtre `userId` sur une nouvelle Server
   Action qui touche une donnee privee, et verifier la chaine complete si la
   table est "enfant" d'une autre ressource utilisateur (voir IDOR wishlist).
+- Dans un script SQL brut (`@libsql/client`) touchant `perfumes.fragranticaUrl`,
+  ne pas ecrire `fragrantica_url` : cette colonne precise est nommee
+  `"fragranticaUrl"` (camelCase, entre guillemets) contrairement a
+  `fragrantica_reference.fragrantica_url` (snake_case) — incoherence
+  historique entre les deux tables, invisible via Drizzle (qui utilise
+  toujours la propriete TS `fragranticaUrl`) mais source d'un
+  `SQL_INPUT_ERROR` immediat en SQL brut.

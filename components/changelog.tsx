@@ -2,6 +2,13 @@
 // Version la plus recente en premier.
 const CHANGELOG: { version: string; changes: string[] }[] = [
   {
+    version: "1.22",
+    changes: [
+      "Photo ajoutee retroactivement aux parfums deja enregistres qui n'en avaient pas",
+      "Recherche simplifiee : une seule liste, plus de distinction \"Deja dans Snifary\"/\"Sur Fragrantica\"",
+    ],
+  },
+  {
     version: "1.21",
     changes: ["Le bouton + de la collection propose a nouveau le choix parfum/nouvelle wishlist"],
   },
