@@ -252,19 +252,54 @@ taux de succes faible (~10-15% en test manuel) mais aucun faux positif
 constate — mieux vaut ne pas
 trouver d'image que d'en attribuer une fausse a la mauvaise fiche.
 
+**Open Beauty Facts (`lib/openbeautyfacts.ts`) : deuxieme source d'image,
+essayee AVANT Wikipedia.** Base ouverte et collaborative (soeur d'Open Food
+Facts, licence Open Database License), API publique faite pour un usage
+programmatique — pas de souci ToS ici non plus. Couverture testee a la
+main : solide sur les grosses marques (Dior, Chanel, Armani, YSL, Givenchy,
+JPG, Guerlain, Versace, Hugo Boss, Calvin Klein, Burberry...), quasi vide
+sur certaines (Prada: 0 resultat) et sur la longue traine du dataset
+(~24k parfums) — c'est une base "scan de code-barres en rayon", forcement
+plus faible sur le niche/vintage. Pas de champ description exploitable
+(verifie : `generic_name`/`ingredients_text` vides sur les parfums), donc
+la description reste Wikipedia seul.
+
+**Piege deja corrige sur le matching Open Beauty Facts.** Meme categorie de
+probleme que Wikipedia, retrouvee en testant a la main avant de brancher
+quoi que ce soit : chercher "Stronger With You" (Armani) remontait la photo
+de "Stronger With You **Intensely**" (un flanker different), et chercher
+"Eau Sauvage" remontait le flacon de "Sauvage" (parfum different) car les
+noms de produits sur Open Beauty Facts sont des titres de fiche retail tres
+bruites/multilingues (ex. "Emporio Armani Stronger With You Intensely Eau
+de Parfum Erkek Parfümü"). Corrige avec deux regles : (1) tous les mots
+significatifs du nom recherche doivent apparaitre chez le candidat (le
+candidat peut avoir des mots EN PLUS -- bruit retail comme "Pour Homme
+Refillable" -- jamais EN MOINS), et (2) rejet si le candidat contient un mot
+d'une liste `VARIANT_MARKERS` (intense, elixir, night, gold...) absent du
+nom recherche. Le cas "Eau Sauvage"/"Sauvage" reste un risque residuel
+accepte (les deux se reduisent au meme token "sauvage" une fois "eau"
+retire, comme pour Wikipedia) — pas de mot differenciateur disponible pour
+trancher automatiquement ce cas precis.
+
 **Prix et description : filet de rattrapage dans `PerfumeDetailSheet`.**
 Consequence directe de tout ce qui precede : ni le dataset local ni
-Fragrantica ne donnent de prix, et la description Wikipedia ne touche
-qu'une petite partie des fiches — beaucoup de parfums ajoutes via la
-recherche/Decouvrir/pages marque se retrouvent donc sans les deux. Plutot
-que d'aller chercher une source de prix qui n'existe pas gratuitement,
-`PerfumeDetailSheet` affiche desormais un champ Prix et un champ
-Description **modifiables pour n'importe quel parfum** (pas seulement les
-fiches manuelles comme le bouton "Modifier" complet) —
+Fragrantica ne donnent de prix, et Open Beauty Facts + Wikipedia combines
+ne couvrent qu'une partie des descriptions/images — beaucoup de parfums
+ajoutes via la recherche/Decouvrir/pages marque se retrouvent quand meme
+sans l'un ou l'autre. Plutot que d'aller chercher une source de prix qui
+n'existe pas gratuitement, `PerfumeDetailSheet` affiche desormais un champ
+Prix et un champ Description **modifiables pour n'importe quel parfum**
+(pas seulement les fiches manuelles comme le bouton "Modifier" complet) —
 `updatePerfumeExtrasAction` fait un simple `UPDATE`, meme acceptation que
 `updateManualPerfumeAction` (`perfumes` sans colonne `createdBy`, n'importe
 quel utilisateur connecte peut corriger). Corrige a la fois les fiches deja
-en base et celles a venir.
+en base et celles a venir. **La description n'est en revanche JAMAIS
+demandee a l'utilisateur au moment de l'ajout** (`ReferencePerfumeSheet` n'a
+plus de champ Description du tout, seulement Prix) — demande explicite,
+trouvee automatiquement (Open Beauty Facts n'en a pas, donc Wikipedia dans
+les faits) ou laissee vide, jamais a la charge de l'utilisateur a la
+creation. Seul le filet de rattrapage sur une fiche deja existante
+(`PerfumeDetailSheet`) reste editable, pour corriger apres coup.
 
 **Meme filet pour l'image** : petit bouton camera en overlay (coin bas-droit
 de la photo) dans `PerfumeDetailSheet`, disponible pour n'importe quel
@@ -282,15 +317,20 @@ TOUTES les fiches parfum** (possedees via `PerfumeDetailSheet`, ou pas
 encore ajoutees via `ReferencePerfumeSheet`) : recommandations tirees de
 `fragrantica_reference`, jamais d'IA/embeddings — scoring explicable sur
 des faits reels via `components/similar-perfumes-section.tsx` ->
-`getSimilarPerfumesAction` : +3 meme marque, +3 supplementaires si meme
-"gamme" probable (`productLine()`, qui retire concentration/annee du nom
-pour reperer les flankers d'une meme ligne, ex. "Sauvage Eau de Parfum" et
-"Sauvage Elixir" -> "sauvage"), +1 par note en commun (top/heart/base
-confondus), +0.5 si le genre correspond (ou que l'un des deux est
-unisexe). Jamais un parfum deja possede par l'utilisateur (section de
-decouverte, pas un rappel de la collection), ni le parfum lui-meme. Section
-masquee entierement si rien ne depasse un score de zero — jamais de
-remplissage avec des resultats sans rapport.
+`getSimilarPerfumesAction`. **Les notes dominent le classement** : +2 par
+note en commun (top/heart/base confondus), contre seulement +1 meme marque
+et +1 de plus si meme "gamme" probable (`productLine()`, qui retire
+concentration/annee du nom pour reperer les flankers d'une meme ligne, ex.
+"Sauvage Eau de Parfum" et "Sauvage Elixir" -> "sauvage"), +0.5 si le genre
+correspond (ou que l'un des deux est unisexe). Ponderation revisee suite a
+un retour explicite : la marque dominait trop le classement au depart (+3
+marque vs +1 par note), au point que deux parfums de la meme maison sans
+aucune note en commun passaient devant un parfum d'une autre marque tres
+proche olfactivement — a l'oppose de l'objectif ("une odeur similaire", pas
+"un autre flacon de la meme maison"). Jamais un parfum deja possede par
+l'utilisateur (section de decouverte, pas un rappel de la collection), ni
+le parfum lui-meme. Section masquee entierement si rien ne depasse un score
+de zero — jamais de remplissage avec des resultats sans rapport.
 
 **Piege deja corrige** : la premiere version faisait un seul `SELECT ...
 WHERE (meme marque OR au moins une note commune) LIMIT 500` — sur 24k

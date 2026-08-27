@@ -15,6 +15,7 @@ import {
 } from "@/lib/fragrantica";
 import { uploadImageFromUrl, uploadImageFromBuffer } from "@/lib/cloudinary";
 import { findWikipediaPerfumeInfo } from "@/lib/wikipedia";
+import { findOpenBeautyFactsImage } from "@/lib/openbeautyfacts";
 import {
   findPerfumesByName,
   findPerfumeByFragranticaUrl,
@@ -144,6 +145,34 @@ export type SavePerfumeInput = {
   tags: Tag[];
 };
 
+// Image + description pour un parfum qu'on s'apprete a ecrire en base.
+// Trois sources, dans cet ordre de priorite pour l'image :
+//  1. Une image deja trouvee (scraping Fragrantica live) -- rare aujourd'hui,
+//     la plupart des ajouts passent par le dataset local qui n'en a jamais.
+//  2. Open Beauty Facts (lib/openbeautyfacts.ts) : vraie photo produit, base
+//     ouverte a l'usage programmatique. Solide sur les grosses marques,
+//     quasi vide sur le niche (verifie manuellement).
+//  3. Wikipedia (lib/wikipedia.ts) : filet de secours, tres restrictif.
+// La description ne vient que de Wikipedia (seule source des trois a en
+// avoir une). Les deux appels reseau tournent en parallele, jamais bloquant.
+async function findImageAndDescription(
+  name: string,
+  brand: string,
+  existingImageUrl: string | null
+): Promise<{ imageUrl: string | null; description: string | null }> {
+  if (existingImageUrl) {
+    const wiki = await findWikipediaPerfumeInfo(name).catch(() => ({ image: null, description: null }) as const);
+    return { imageUrl: existingImageUrl, description: wiki.description };
+  }
+
+  const [obfImage, wiki] = await Promise.all([
+    findOpenBeautyFactsImage(name, brand).catch(() => null),
+    findWikipediaPerfumeInfo(name).catch(() => ({ image: null, description: null }) as const),
+  ]);
+
+  return { imageUrl: obfImage ?? wiki.image, description: wiki.description };
+}
+
 // Etape 3 : l'utilisateur valide le brouillon (potentiellement corrige) ->
 // seul moment ou on ecrit en base, comme acte dans roadmap.md section 5.
 export async function savePerfumeAction(input: SavePerfumeInput): Promise<number> {
@@ -152,17 +181,13 @@ export async function savePerfumeAction(input: SavePerfumeInput): Promise<number
   const existing = await findPerfumeByFragranticaUrl(input.draft.fragranticaUrl);
   if (existing) return existing.id;
 
-  // Ni le dataset local (fragrantica_reference) ni le scraping Fragrantica
-  // ne donnent de description utilisable (le champ "description" expose par
-  // Fragrantica n'est qu'un gabarit qui repete les notes, aucune valeur
-  // ajoutee) -- Wikipedia est donc la seule source pour ce champ, tentee a
-  // chaque ajout. Best-effort, ne doit jamais faire echouer l'ajout.
-  const wiki = await findWikipediaPerfumeInfo(input.draft.name).catch(
-    () => ({ image: null, description: null }) as const
+  const { imageUrl, description } = await findImageAndDescription(
+    input.draft.name,
+    input.draft.brand,
+    input.draft.imageUrl
   );
 
-  const imageSourceUrl = input.draft.imageUrl ?? wiki.image;
-  const imagePublicId = imageSourceUrl ? await uploadImageFromUrl(imageSourceUrl, "perfumes") : null;
+  const imagePublicId = imageUrl ? await uploadImageFromUrl(imageUrl, "perfumes") : null;
 
   return insertPerfumeRow({
     name: input.draft.name,
@@ -170,7 +195,7 @@ export async function savePerfumeAction(input: SavePerfumeInput): Promise<number
     imagePublicId,
     fragranticaUrl: input.draft.fragranticaUrl,
     inspiredBy: null,
-    description: wiki.description,
+    description,
     price: input.price,
     volumeMl: input.volumeMl,
     concentration: input.concentration,
@@ -185,24 +210,14 @@ export async function savePerfumeAction(input: SavePerfumeInput): Promise<number
 // pas de brouillon a confirmer/annuler comme resolvePerfumeAction : ces deux
 // ecrans montrent deja la fiche complete avant d'appeler cette fonction (voir
 // ReferencePerfumeSheet), donc resolution et ecriture sont composees
-// directement. `overrides` porte ce que l'utilisateur a saisi a la main
-// (prix, description) dans ce meme ecran -- prioritaire sur Wikipedia, sans
-// jamais ecraser une valeur existante avec `null` si l'utilisateur laisse le
-// champ vide.
-async function resolveAndSaveReferencePerfume(
-  fragranticaUrl: string,
-  overrides: { price: number | null; description: string | null }
-): Promise<number> {
+// directement. `price` est le seul champ saisi a la main dans ce meme ecran
+// (la description n'est jamais demandee a l'utilisateur, voir
+// findImageAndDescription -- trouvee automatiquement ou laissee vide).
+async function resolveAndSaveReferencePerfume(fragranticaUrl: string, price: number | null): Promise<number> {
   const existing = await findPerfumeByFragranticaUrl(fragranticaUrl);
   if (existing) {
-    if (overrides.price != null || overrides.description != null) {
-      await db
-        .update(perfumes)
-        .set({
-          ...(overrides.price != null ? { price: overrides.price } : {}),
-          ...(overrides.description != null ? { description: overrides.description } : {}),
-        })
-        .where(eq(perfumes.id, existing.id));
+    if (price != null) {
+      await db.update(perfumes).set({ price }).where(eq(perfumes.id, existing.id));
     }
     return existing.id;
   }
@@ -210,11 +225,8 @@ async function resolveAndSaveReferencePerfume(
   const reference = await findReferenceByUrl(fragranticaUrl);
   if (!reference) throw new Error("Parfum introuvable");
 
-  const wiki = overrides.description
-    ? { image: null, description: null }
-    : await findWikipediaPerfumeInfo(reference.name).catch(() => ({ image: null, description: null }) as const);
-
-  const imagePublicId = wiki.image ? await uploadImageFromUrl(wiki.image, "perfumes") : null;
+  const { imageUrl, description } = await findImageAndDescription(reference.name, reference.brand, null);
+  const imagePublicId = imageUrl ? await uploadImageFromUrl(imageUrl, "perfumes") : null;
 
   return insertPerfumeRow({
     name: reference.name,
@@ -222,8 +234,8 @@ async function resolveAndSaveReferencePerfume(
     imagePublicId,
     fragranticaUrl: reference.fragranticaUrl,
     inspiredBy: null,
-    description: overrides.description ?? wiki.description,
-    price: overrides.price,
+    description,
+    price,
     volumeMl: 100,
     concentration: guessConcentration(reference.name),
     gender: reference.gender,
@@ -239,7 +251,6 @@ async function resolveAndSaveReferencePerfume(
 export type SaveReferencePerfumeInput = {
   fragranticaUrl: string;
   price: number | null;
-  description: string | null;
   toCollection: boolean;
   wishlistIds: number[];
 };
@@ -255,10 +266,7 @@ export async function saveReferencePerfumeAction(input: SaveReferencePerfumeInpu
     throw new Error("Choisis au moins une destination");
   }
 
-  const perfumeId = await resolveAndSaveReferencePerfume(input.fragranticaUrl, {
-    price: input.price,
-    description: input.description,
-  });
+  const perfumeId = await resolveAndSaveReferencePerfume(input.fragranticaUrl, input.price);
 
   if (input.toCollection) {
     await db.insert(collectionItems).values({ userId: user.id, perfumeId }).onConflictDoNothing();

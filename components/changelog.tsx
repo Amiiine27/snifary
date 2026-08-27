@@ -2,6 +2,14 @@
 // Version la plus recente en premier.
 const CHANGELOG: { version: string; changes: string[] }[] = [
   {
+    version: "1.15",
+    changes: [
+      "Nouvelle source d'image (Open Beauty Facts), en plus de Wikipedia -- surtout efficace sur les grandes marques",
+      "Description trouvee automatiquement a l'ajout, plus besoin de la remplir soi-meme",
+      "\"Vous pourriez aimer\" priorise desormais les notes en commun plutot que la marque",
+    ],
+  },
+  {
     version: "1.14",
     changes: ["Ajoute une photo sur n'importe quel parfum depuis sa fiche (petit bouton camera sur l'image)"],
   },

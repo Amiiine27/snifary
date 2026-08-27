@@ -239,12 +239,15 @@ export type SimilarPerfumeSource = {
 };
 
 // "Vous pourriez aimer" sur chaque fiche parfum (deja possede ou pas encore).
-// Scoring simple et explicable sur des faits reels -- pas d'IA/embeddings,
-// juste ce qu'on peut justifier : meme marque, meme "gamme" probable
-// (`productLine`), notes en commun (top/heart/base confondus), un leger bonus
-// si le genre correspond. Candidats tires de `fragrantica_reference` (meme
-// marque OU au moins une note commune), jamais ce que l'utilisateur possede
-// deja -- c'est une section de decouverte, pas un rappel de sa collection.
+// Scoring simple et explicable sur des faits reels -- pas d'IA/embeddings.
+// Les NOTES dominent le classement (le but est une odeur proche, pas juste
+// un autre flacon de la meme maison) : +2 par note en commun (top/heart/base
+// confondus), contre seulement +1 meme marque et +1 de plus si meme "gamme"
+// probable (`productLine`) -- un petit coup de pouce/depart egal en cas
+// d'ex-aequo, pas le critere principal. +0.5 si le genre correspond.
+// Candidats tires de `fragrantica_reference` (meme marque OU au moins une
+// note commune), jamais ce que l'utilisateur possede deja -- c'est une
+// section de decouverte, pas un rappel de sa collection.
 export async function getSimilarPerfumes(
   source: SimilarPerfumeSource,
   userId: string,
@@ -299,15 +302,20 @@ export async function getSimilarPerfumes(
     if (source.excludeFragranticaUrl && row.fragranticaUrl === source.excludeFragranticaUrl) continue;
     if (ownedUrls.has(row.fragranticaUrl)) continue;
 
+    // Les notes pesent plus lourd que la marque : le but est de retrouver
+    // une odeur proche, pas juste un autre flacon de la meme maison --
+    // demande explicite apres avoir remarque que la marque dominait trop le
+    // classement (deux parfums de la meme marque sans notes en commun
+    // passaient devant un parfum d'une autre marque tres proche en notes).
     const sameBrand = row.brand.toLowerCase() === sourceBrandLower;
     let score = 0;
     if (sameBrand) {
-      score += 3;
-      if (productLine(row.name) === sourceLine) score += 3;
+      score += 1;
+      if (productLine(row.name) === sourceLine) score += 1;
     }
 
     const rowNotes = [...splitNotesList(row.notesTop), ...splitNotesList(row.notesHeart), ...splitNotesList(row.notesBase)];
-    score += rowNotes.filter((n) => sourceNotesLower.has(n.toLowerCase())).length;
+    score += rowNotes.filter((n) => sourceNotesLower.has(n.toLowerCase())).length * 2;
 
     if (row.gender === source.gender || row.gender === "unisexe" || source.gender === "unisexe") score += 0.5;
 

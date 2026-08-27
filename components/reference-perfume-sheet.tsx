@@ -8,7 +8,6 @@ import { saveReferencePerfumeAction } from "@/lib/actions/perfumes";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { NotesRow } from "@/components/perfume-detail-sheet";
 import { SimilarPerfumesSection } from "@/components/similar-perfumes-section";
@@ -64,7 +63,6 @@ function Body({
 }) {
   const [pending, startTransition] = useTransition();
   const [price, setPrice] = useState("");
-  const [description, setDescription] = useState("");
   const [toCollection, setToCollection] = useState(true);
   const [wishlistIds, setWishlistIds] = useState<number[]>([]);
 
@@ -80,7 +78,6 @@ function Body({
         await saveReferencePerfumeAction({
           fragranticaUrl: perfume.fragranticaUrl,
           price: price.trim() ? Number(price) : null,
-          description: description.trim() || null,
           toCollection,
           wishlistIds,
         });
@@ -111,26 +108,15 @@ function Body({
           <NotesRow label="Fond" notes={perfume.notes.base} />
         </div>
 
-        <div className="space-y-3">
-          <div className="space-y-2">
-            <label className="text-xs font-medium text-muted-foreground">Prix (&euro;) &mdash; optionnel</label>
-            <Input
-              type="number"
-              inputMode="decimal"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              placeholder="Non renseigne"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-xs font-medium text-muted-foreground">Description &mdash; optionnel</label>
-            <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Aucune description pour l'instant"
-              rows={3}
-            />
-          </div>
+        <div className="space-y-2">
+          <label className="text-xs font-medium text-muted-foreground">Prix (&euro;) &mdash; optionnel</label>
+          <Input
+            type="number"
+            inputMode="decimal"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            placeholder="Non renseigne"
+          />
         </div>
 
         <div className="space-y-2">
