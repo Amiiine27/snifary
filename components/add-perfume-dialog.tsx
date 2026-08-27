@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Search, Loader2, AlertCircle, Plus, Upload } from "lucide-react";
-import type { ScrapedPerfume } from "@/lib/fragrantica";
 import type { PerfumeCard as PerfumeCardData } from "@/lib/perfumes";
 import {
   searchLocalPerfumesAction,
@@ -17,6 +16,7 @@ import {
 import { addToCollectionAction } from "@/lib/actions/collection";
 import { addItemToWishlistAction } from "@/lib/actions/wishlists";
 import { removeImageBackground } from "@/lib/remove-background";
+import { guessConcentration } from "@/lib/concentration";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,7 +32,7 @@ import {
 
 type Target = { kind: "collection" } | { kind: "wishlist"; wishlistId: number };
 type FragranticaCandidate = { url: string; title: string };
-type View = "search" | "confirm" | "manual";
+type View = "search" | "manual";
 
 const TAG_OPTIONS = [
   { value: "printemps", label: "Printemps" },
@@ -70,7 +70,6 @@ export function AddPerfumeDialog({
   const [remoteSearching, setRemoteSearching] = useState(false);
   const [remoteError, setRemoteError] = useState<string | null>(null);
 
-  const [draft, setDraft] = useState<ScrapedPerfume | null>(null);
   const [pending, startTransition] = useTransition();
 
   const queryTooShort = query.trim().length < 2;
@@ -130,7 +129,6 @@ export function AddPerfumeDialog({
     setLocalResults(null);
     setRemoteResults(null);
     setRemoteError(null);
-    setDraft(null);
   }
 
   async function addPerfumeIdToTarget(perfumeId: number) {
@@ -154,21 +152,32 @@ export function AddPerfumeDialog({
     });
   }
 
+  // Aucune etape de confirmation manuelle : ni le dataset local ni Fragrantica
+  // n'exposent prix/contenance/categories de facon fiable (voir PROJECT.md),
+  // donc rien de reel a faire confirmer a l'utilisateur ici -- on ajoute
+  // directement avec les infos deja connues (genre, notes, concentration
+  // devinee depuis le nom quand possible).
   function handlePickCandidate(url: string) {
     startTransition(async () => {
       try {
         const result = await resolvePerfumeAction(url);
-        if ("existingId" in result) {
-          await addPerfumeIdToTarget(result.existingId);
-          toast.success("Ajoute");
-          onOpenChange(false);
-          reset();
-        } else {
-          setDraft(result.draft);
-          setView("confirm");
-        }
+        const perfumeId =
+          "existingId" in result
+            ? result.existingId
+            : await savePerfumeAction({
+                draft: result.draft,
+                price: null,
+                volumeMl: 100,
+                concentration: guessConcentration(result.draft.name),
+                gender: result.draft.gender,
+                tags: [],
+              });
+        await addPerfumeIdToTarget(perfumeId);
+        toast.success("Ajoute");
+        onOpenChange(false);
+        reset();
       } catch {
-        toast.error("Impossible de recuperer cette fiche Fragrantica");
+        toast.error("Impossible d'ajouter ce parfum");
       }
     });
   }
@@ -191,7 +200,6 @@ export function AddPerfumeDialog({
       <DialogContent className="flex h-[80vh] w-[calc(100%-2rem)] max-w-md flex-col overflow-hidden sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="text-xl">
-            {view === "confirm" && "Confirme les infos"}
             {view === "manual" && "Ajouter manuellement"}
             {view === "search" && "Ajouter un parfum"}
           </DialogTitle>
@@ -255,29 +263,6 @@ export function AddPerfumeDialog({
                 <Plus /> Ajouter un parfum manuellement
               </Button>
             )}
-          </div>
-        )}
-
-        {view === "confirm" && draft && (
-          <div className="flex-1 overflow-y-auto">
-            <ConfirmForm
-              draft={draft}
-              pending={pending}
-              onCancel={() => setView("search")}
-              onConfirm={(values) => {
-                startTransition(async () => {
-                  try {
-                    const perfumeId = await savePerfumeAction({ draft, ...values });
-                    await addPerfumeIdToTarget(perfumeId);
-                    toast.success("Parfum ajoute");
-                    onOpenChange(false);
-                    reset();
-                  } catch {
-                    toast.error("Impossible d'enregistrer ce parfum");
-                  }
-                });
-              }}
-            />
           </div>
         )}
 
@@ -422,54 +407,6 @@ function MetaFields({ value, onChange }: { value: MetaValues; onChange: (v: Meta
         </div>
       </div>
     </>
-  );
-}
-
-function ConfirmForm({
-  draft,
-  pending,
-  onCancel,
-  onConfirm,
-}: {
-  draft: ScrapedPerfume;
-  pending: boolean;
-  onCancel: () => void;
-  onConfirm: (values: MetaValues) => void;
-}) {
-  const [meta, setMeta] = useState<MetaValues>({
-    price: null,
-    volumeMl: 100,
-    concentration: null,
-    gender: draft.gender,
-    tags: [],
-  });
-
-  const totalNotes = useMemo(
-    () => draft.notes.top.length + draft.notes.heart.length + draft.notes.base.length,
-    [draft]
-  );
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <p className="font-medium">{draft.name}</p>
-        <p className="text-sm text-muted-foreground">{draft.brand}</p>
-        {totalNotes > 0 && (
-          <p className="mt-1 text-xs text-muted-foreground">{totalNotes} notes olfactives trouvees</p>
-        )}
-      </div>
-
-      <MetaFields value={meta} onChange={setMeta} />
-
-      <div className="mt-2 flex gap-2">
-        <Button variant="outline" className="flex-1" onClick={onCancel} disabled={pending}>
-          Retour
-        </Button>
-        <Button className="flex-1" disabled={pending} onClick={() => onConfirm(meta)}>
-          {pending ? "Ajout..." : "Ajouter"}
-        </Button>
-      </div>
-    </div>
   );
 }
 

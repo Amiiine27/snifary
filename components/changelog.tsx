@@ -1,0 +1,78 @@
+// Journal des nouveautes, maintenu a la main a chaque changement notable.
+// Version la plus recente en premier.
+const CHANGELOG: { version: string; changes: string[] }[] = [
+  {
+    version: "1.9",
+    changes: [
+      "Recherche instantanee dans un catalogue de pres de 24 000 parfums, toutes marques (avant limite a Fragrantica en direct, souvent indisponible)",
+      "Ajout direct en un tap, sans ecran de confirmation a remplir",
+      "Description et photo recuperees automatiquement sur Wikipedia quand disponibles",
+    ],
+  },
+  {
+    version: "1.8",
+    changes: [
+      "Statistiques affichees en chips au-dessus de la collection",
+      "Correctif d'un echec d'upload de photo (\"Impossible de traiter l'image\")",
+    ],
+  },
+  {
+    version: "1.7",
+    changes: [
+      "Ajout limite a la collection depuis la fiche d'un parfum",
+      "Suivi des clones/dupes (parfum d'inspiration)",
+      "Modification des parfums saisis manuellement",
+    ],
+  },
+  {
+    version: "1.6",
+    changes: ["Suppression automatique du fond sur les photos ajoutees manuellement"],
+  },
+  {
+    version: "1.5",
+    changes: ["Barre du haut toujours visible avec le logo et le theme"],
+  },
+  {
+    version: "1.4",
+    changes: ["Header partage, notifications en haut de l'ecran, correctifs de la fiche detail sur mobile"],
+  },
+  {
+    version: "1.3",
+    changes: ["Recadrage reel de la photo de profil, page statistiques simplifiee"],
+  },
+  {
+    version: "1.2",
+    changes: ["Ajout manuel d'un parfum, corrections de la fiche detail, cartes sur l'accueil"],
+  },
+  {
+    version: "1.1",
+    changes: [
+      "Interface agrandie, nouvelle police pour les titres, filtres, page statistiques et collection",
+      "Corrections recherche, navigation et detection du genre",
+    ],
+  },
+  {
+    version: "1.0",
+    changes: ["Premiere version : connexion Google, recherche Fragrantica, collection et wishlists"],
+  },
+];
+
+export function Changelog() {
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Nouveautes</p>
+      <div className="flex flex-col gap-5">
+        {CHANGELOG.map((entry) => (
+          <div key={entry.version}>
+            <p className="text-sm font-medium">Version {entry.version}</p>
+            <ul className="mt-1.5 list-disc space-y-1 pl-4 text-sm text-muted-foreground">
+              {entry.changes.map((change) => (
+                <li key={change}>{change}</li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

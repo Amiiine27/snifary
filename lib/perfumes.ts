@@ -1,5 +1,5 @@
 import "server-only";
-import { eq, inArray, like, or } from "drizzle-orm";
+import { and, eq, inArray, like, notInArray, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   perfumes,
@@ -10,6 +10,7 @@ import {
   wishlists,
   wishlistItems,
   fragranticaReference,
+  userPreferences,
 } from "@/db/schema";
 import { cloudinaryUrl } from "@/lib/cloudinary";
 
@@ -28,6 +29,7 @@ export type PerfumeDetails = PerfumeCard & {
   concentration: string | null;
   fragranticaUrl: string | null;
   inspiredBy: string | null;
+  description: string | null;
   tags: string[];
   notes: { top: string[]; heart: string[]; base: string[] };
 };
@@ -68,6 +70,7 @@ async function attachDetails(rows: (typeof perfumes.$inferSelect)[]): Promise<Pe
     concentration: p.concentration,
     fragranticaUrl: p.fragranticaUrl,
     inspiredBy: p.inspiredBy,
+    description: p.description,
     tags: tagRows.filter((t) => t.perfumeId === p.id).map((t) => t.tag),
     notes: {
       top: noteRows.filter((n) => n.perfumeId === p.id && n.type === "top").map((n) => n.name),
@@ -118,6 +121,71 @@ export async function searchFragranticaReference(query: string): Promise<Referen
 export async function findReferenceByUrl(url: string) {
   const [row] = await db.select().from(fragranticaReference).where(eq(fragranticaReference.fragranticaUrl, url));
   return row ?? null;
+}
+
+export type ReferencePerfume = {
+  fragranticaUrl: string;
+  name: string;
+  brand: string;
+  gender: "homme" | "femme" | "unisexe";
+};
+
+function toReferencePerfume(r: typeof fragranticaReference.$inferSelect): ReferencePerfume {
+  return { fragranticaUrl: r.fragranticaUrl, name: r.name, brand: r.brand, gender: r.gender };
+}
+
+export async function getUserGenderPreference(userId: string): Promise<"homme" | "femme" | "unisexe"> {
+  const [row] = await db
+    .select({ genderPreference: userPreferences.genderPreference })
+    .from(userPreferences)
+    .where(eq(userPreferences.userId, userId));
+  return row?.genderPreference ?? "unisexe";
+}
+
+// Section "Decouvrir" de l'accueil : tirage aleatoire dans le dataset local
+// (fragrantica_reference, ~24k parfums toutes marques), filtre par genre
+// prefere (unisexe = pas de filtre), en excluant ce que l'utilisateur
+// possede deja. Tape dessus l'ajoute directement a la collection, meme
+// logique que la recherche (voir resolvePerfumeAction/savePerfumeAction).
+export async function getDiscoverPerfumes(
+  userId: string,
+  gender: "homme" | "femme" | "unisexe",
+  limit = 12
+): Promise<ReferencePerfume[]> {
+  const owned = await db
+    .select({ url: perfumes.fragranticaUrl })
+    .from(collectionItems)
+    .innerJoin(perfumes, eq(perfumes.id, collectionItems.perfumeId))
+    .where(eq(collectionItems.userId, userId));
+  const ownedUrls = owned.map((o) => o.url).filter((u): u is string => u !== null);
+
+  const conditions = [
+    gender === "unisexe" ? undefined : or(eq(fragranticaReference.gender, gender), eq(fragranticaReference.gender, "unisexe")),
+    ownedUrls.length > 0 ? notInArray(fragranticaReference.fragranticaUrl, ownedUrls) : undefined,
+  ].filter((c) => c !== undefined);
+
+  const rows = await db
+    .select()
+    .from(fragranticaReference)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(sql`RANDOM()`)
+    .limit(limit);
+
+  return rows.map(toReferencePerfume);
+}
+
+// Page marque : tout le catalogue local d'une marque (dataset, pas
+// seulement ce qui est deja dans Snifary). Comparaison insensible a la
+// casse -- le nom de marque affiche cote UI (perfume.brand) peut venir du
+// scraping live, du dataset, ou d'une saisie manuelle, dont la casse n'est
+// pas garantie identique au dataset.
+export async function getBrandCatalog(brand: string): Promise<ReferencePerfume[]> {
+  const rows = await db
+    .select()
+    .from(fragranticaReference)
+    .where(sql`lower(${fragranticaReference.brand}) = lower(${brand})`)
+    .orderBy(fragranticaReference.name);
+  return rows.map(toReferencePerfume);
 }
 
 export async function listCollection(userId: string): Promise<

@@ -5,6 +5,22 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { requireUser } from "@/lib/session";
 import { uploadAvatarFromBuffer } from "@/lib/cloudinary";
+import { db } from "@/db";
+import { userPreferences } from "@/db/schema";
+
+type Gender = "homme" | "femme" | "unisexe";
+
+export async function updateGenderPreferenceAction(gender: Gender) {
+  const user = await requireUser();
+
+  await db
+    .insert(userPreferences)
+    .values({ userId: user.id, genderPreference: gender })
+    .onConflictDoUpdate({ target: userPreferences.userId, set: { genderPreference: gender } });
+
+  revalidatePath("/profile");
+  revalidatePath("/");
+}
 
 export async function updateProfileNameAction(name: string) {
   await requireUser();

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { toast } from "sonner";
 import { Droplet, ShoppingBag, Trash2, Pencil, Sun, Snowflake, Flower2, Leaf, SunMedium, MoonStar } from "lucide-react";
 import type { PerfumeDetails } from "@/lib/perfumes";
@@ -117,7 +118,12 @@ function DetailBody({
           )}
         </div>
         <SheetTitle className="text-xl">{perfume.name}</SheetTitle>
-        <p className="text-base text-muted-foreground">{perfume.brand}</p>
+        <Link
+          href={`/brands/${encodeURIComponent(perfume.brand)}`}
+          className="text-base text-muted-foreground underline-offset-2 hover:underline"
+        >
+          {perfume.brand}
+        </Link>
       </SheetHeader>
 
       <div className="flex-1 space-y-4 overflow-y-auto px-4">
@@ -130,6 +136,10 @@ function DetailBody({
 
         {perfume.inspiredBy && (
           <p className="text-center text-xs text-muted-foreground">Clone inspire de {perfume.inspiredBy}</p>
+        )}
+
+        {perfume.description && (
+          <p className="text-center text-sm text-muted-foreground">{perfume.description}</p>
         )}
 
         {perfume.tags.length > 0 && (

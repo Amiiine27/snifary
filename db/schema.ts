@@ -24,6 +24,7 @@ export const perfumes = sqliteTable(
     fragranticaUrl: text("fragranticaUrl"),
     // Non-null = c'est un "clone"/dupe, precise de quel parfum original il s'inspire.
     inspiredBy: text("inspired_by"),
+    description: text("description"), // resume Wikipedia, voir lib/wikipedia.ts -- jamais scrape/invente
     price: real("price"), // prix en euros, nullable (pas toujours connu)
     volumeMl: integer("volume_ml").notNull().default(100), // contenance, 100ml par defaut
     concentration: text("concentration", {
@@ -161,6 +162,29 @@ export const wishlists = sqliteTable("wishlists", {
     .notNull()
     .default(sql`(unixepoch())`),
 });
+
+// ---------------------------------------------------------------------------
+// user_preferences : reglages perso hors du perimetre de Better Auth. Table
+// separee plutot qu'une colonne sur `user` -- ce dernier est recopie a la
+// main depuis le schema attendu par Better Auth (voir db/auth-schema.ts),
+// on evite d'y toucher pour un champ qui n'a rien a voir avec l'auth.
+// ---------------------------------------------------------------------------
+export const userPreferences = sqliteTable(
+  "user_preferences",
+  {
+    userId: text("user_id")
+      .primaryKey()
+      .references(() => user.id, { onDelete: "cascade" }),
+    // Filtre la section "Decouvrir" de l'accueil : "unisexe" = aucun filtre
+    // (tout s'affiche), sinon le genre choisi + les parfums unisexe.
+    genderPreference: text("gender_preference", { enum: ["homme", "femme", "unisexe"] })
+      .notNull()
+      .default("unisexe"),
+  },
+  (table) => [
+    check("user_preferences_gender_check", sql`${table.genderPreference} IN ('homme', 'femme', 'unisexe')`),
+  ]
+);
 
 // ---------------------------------------------------------------------------
 // wishlist_items : pivot wishlist <-> parfum.

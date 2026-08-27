@@ -112,6 +112,11 @@ schema actuel suffit toujours.
   separes par virgules comme `ManualForm`). Une ligne ici ne devient un
   parfum dans `perfumes` que si un utilisateur la choisit puis confirme
   (`resolvePerfumeAction`/`savePerfumeAction`) — jamais automatiquement.
+- **`user_preferences`** — table separee plutot qu'une colonne sur `user`
+  pour ne pas toucher ce dernier (recopie a la main depuis le schema Better
+  Auth, voir plus bas — un champ sans rapport avec l'auth n'a rien a y
+  faire). userId (PK, →user, cascade), genderPreference (enum, CHECK,
+  defaut `unisexe`) — filtre la section Decouvrir de l'accueil.
 
 Migrations : `drizzle/*.sql` + `drizzle/meta/`. **Attention** : `drizzle-kit
 push` a deja echoue une fois sur Turso pour un `ALTER TABLE ADD COLUMN NOT
@@ -219,22 +224,32 @@ Leve" au lieu de "Lève") — limite connue et acceptee du dataset, pas un bug.
 Script d'import ponctuel supprime apres usage (meme convention que les
 scripts de migration Drizzle, voir plus haut) ; le CSV source vit hors repo.
 
-**Image Wikipedia en filet de secours (`lib/wikipedia.ts`)** : les fiches
-resolues via `fragrantica_reference` n'ont jamais d'image. `savePerfumeAction`
-tente donc Wikipedia (API MediaWiki publique, pas de souci ToS) uniquement
-quand `draft.imageUrl` est deja `null`. **Volontairement tres restrictif**
-suite a des faux positifs constates en test : une premiere version cherchait
-aussi `"{brand} {name}"` et le nom seul, ce qui a attrape l'article de la
-lettre de l'alphabet "Y" pour le parfum YSL "Y", une photo d'Audrey Hepburn
-pour Givenchy "L'Interdit" (le parfum lui rend hommage, mais l'image n'est
-pas un flacon), et le flacon d'"Eau Sauvage" (parfum Dior different et plus
-ancien) pour "Sauvage" via une redirection Wikipedia. Design retenu : titre
-exact `"{name} (perfume)"` uniquement, **aucune redirection suivie** (`prop=
-redirects` absent volontairement, une redirection = article sur un AUTRE
-parfum la plupart du temps), page exigee categorisee perfume/fragrance/
-cologne, image exigee hebergee sur Wikimedia Commons (jamais un fichier
-"fair use" local a en.wikipedia.org). Resultat : taux de succes faible
-(~10-15% en test manuel) mais aucun faux positif observe — mieux vaut ne pas
+**Image ET description Wikipedia en filet de secours (`lib/wikipedia.ts`,
+`findWikipediaPerfumeInfo`)** : les fiches resolues via `fragrantica_reference`
+n'ont jamais d'image, et ni ce dataset ni le scraping Fragrantica ne donnent
+de description utilisable (le champ "description" expose par Fragrantica
+n'est qu'un gabarit auto-genere qui repete les notes deja affichees
+ailleurs — verifie sur plusieurs fiches, aucune valeur ajoutee, delibere-
+ment pas utilise). `savePerfumeAction` tente donc Wikipedia (API MediaWiki
+publique, pas de souci ToS) a chaque ajout pour la description, et
+seulement quand `draft.imageUrl` est deja `null` pour l'image.
+`perfumes.description` (colonne texte nullable, migration `0004`) stocke le
+resultat, affiche dans `PerfumeDetailSheet`. **Volontairement tres
+restrictif** suite a des faux positifs constates en test : une premiere
+version cherchait aussi `"{brand} {name}"` et le nom seul, ce qui a attrape
+l'article de la lettre de l'alphabet "Y" pour le parfum YSL "Y", une photo
+d'Audrey Hepburn pour Givenchy "L'Interdit" (le parfum lui rend hommage,
+mais l'image n'est pas un flacon), et le flacon d'"Eau Sauvage" (parfum
+Dior different et plus ancien) pour "Sauvage" via une redirection
+Wikipedia. Design retenu : titre exact `"{name} (perfume)"` uniquement,
+**aucune redirection suivie** (`prop=redirects` absent volontairement, une
+redirection = article sur un AUTRE parfum la plupart du temps), page
+exigee categorisee perfume/fragrance/cologne, image exigee hebergee sur
+Wikimedia Commons (jamais un fichier "fair use" local a en.wikipedia.org),
+description tronquee a ~600 caracteres a la derniere phrase complete
+(`exintro=1&explaintext=1`, resume avant la table des matieres). Resultat :
+taux de succes faible (~10-15% en test manuel) mais aucun faux positif
+constate — mieux vaut ne pas
 trouver d'image que d'en attribuer une fausse a la mauvaise fiche.
 
 **Saisons/jour-nuit NON scrapables** : le widget "When To Wear" de Fragrantica
@@ -266,10 +281,23 @@ Snifary, mais a garder en tete si on refait du scraping cible sur ce site.
    id direct ; sinon `fragrantica_reference` (notes deja connues, pas de
    reseau) ; sinon scrape live en dernier recours -> brouillon **jamais
    ecrit en base** a ce stade.
-3. L'utilisateur confirme/corrige (prix, contenance, concentration, genre,
-   tags) -> `savePerfumeAction` est le **seul moment d'ecriture** (upload
-   Cloudinary de l'image Fragrantica via `uploadImageFromUrl`, insertion
-   perfume + notes + tags).
+3. **Plus d'etape de confirmation manuelle** (ecran "Confirme les infos" +
+   `ConfirmForm` supprimes) : ni le dataset local ni Fragrantica n'exposent
+   prix/contenance/categories de facon fiable, donc rien de reel a faire
+   confirmer par l'utilisateur a chaque ajout — demande explicite ("c'est pas
+   a moi de confirmer"). `handlePickCandidate` appelle directement
+   `savePerfumeAction` des que `resolvePerfumeAction` renvoie un brouillon :
+   `price: null`, `volumeMl: 100`, `tags: []`, `gender` = celui du brouillon,
+   `concentration` devinee depuis le texte du nom (`guessConcentration()`
+   dans `add-perfume-dialog.tsx` — repere "eau de parfum"/"eau de
+   toilette"/"elixir"/"extrait"/"cologne"/"parfum" en toutes lettres, sinon
+   `null`). `savePerfumeAction` reste le **seul moment d'ecriture** (upload
+   Cloudinary de l'image Fragrantica via `uploadImageFromUrl` si presente,
+   sinon tentative Wikipedia, insertion perfume + notes). Consequence
+   assumee : un parfum ajoute par recherche (dataset ou scrape, donc
+   `fragranticaUrl !== null`) n'a **pas** de bouton "Modifier" (voir point 7)
+   — impossible de lui ajouter un prix ou une photo apres coup pour
+   l'instant ; a rouvrir si ca devient genant a l'usage.
 4. Si aucun resultat (ni local ni Fragrantica) -> bouton "+ Ajouter un parfum
    manuellement" -> `ManualForm` (nom, marque, image uploadee directement via
    `uploadPerfumeImageAction`, notes en champs texte separes par virgules,
@@ -278,10 +306,11 @@ Snifary, mais a garder en tete si on refait du scraping cible sur ce site.
 5. Suppression de fond (`lib/remove-background.ts`, `@imgly/background-removal`,
    modele `isnet_quint8`, 100% navigateur/WASM, import dynamique) appliquee
    **uniquement sur les images uploadees manuellement** (fichier local, pas de
-   souci CORS). Les images scrapees depuis Fragrantica ne passent PAS par ce
-   traitement (le fetch cross-origin de leur CDN depuis le navigateur serait
-   fragile) — extension possible plus tard en ajoutant un choix d'image
-   optionnel dans l'etape de confirmation d'un brouillon scrape.
+   souci CORS). Les images scrapees depuis Fragrantica ou trouvees sur Wikipedia
+   ne passent PAS par ce traitement (fetch cross-origin depuis le navigateur
+   serait fragile, et se fait de toute facon cote serveur dans
+   `savePerfumeAction` maintenant qu'il n'y a plus d'etape de confirmation
+   ou brancher un choix d'image cote client).
 6. Champ "Clone" dans `ManualForm` : checkbox qui, si cochee, affiche un champ
    texte libre stockant dans `perfumes.inspiredBy` le nom du parfum original
    dont ce clone/dupe s'inspire. Uniquement dans le formulaire manuel (n'a pas
@@ -335,9 +364,27 @@ garder si on retouche cette config, sans quoi le bug revient silencieusement.
   `AppTopBar` (fixe en haut, flottant SANS fond/bordure — logo "Snifary" +
   tagline aleatoire + toggle theme, cf section UI) et `BottomNav` (fixe en
   bas, 5 icones : Avis/Collection/Accueil/Wishlists/Profil).
-- `app/(app)/page.tsx` (Accueil) — apercu de chaque section (collection
-  d'abord, puis chaque wishlist dans l'ordre de `position`), lien "voir tout"
-  vers la page dediee. Bouton "+ Nouvelle wishlist" en bas.
+- `app/(app)/page.tsx` (Accueil) — section **"Decouvrir"** en tout premier
+  (`components/discover-section.tsx`) : tirage aleatoire de 12 parfums dans
+  `fragrantica_reference` (~24k, toutes marques), filtre par
+  `userPreferences.genderPreference` (reglable dans Profil, defaut
+  `unisexe` = pas de filtre), en excluant ce que l'utilisateur possede deja.
+  Jamais d'image (le dataset n'en a pas) — cartes compactes en scroll
+  horizontal plutot que le grid a vignettes utilise ailleurs. Tape dessus ->
+  `quickAddToCollectionAction` (resolve + save + ajout collection en un
+  aller-retour serveur, meme logique que la recherche mais sans target
+  wishlist possible — toujours la collection). Puis apercu de chaque section
+  (collection d'abord, puis chaque wishlist dans l'ordre de `position`), lien
+  "voir tout" vers la page dediee. Bouton "+ Nouvelle wishlist" en bas.
+- `app/(app)/brands/[brand]/page.tsx` — catalogue complet d'une marque, tire
+  du meme dataset local (`getBrandCatalog`, comparaison de marque insensible
+  a la casse). Atteinte en tapant le nom de la marque (devenu lien) dans
+  `PerfumeDetailSheet`. Vue dediee `components/brand-catalog-view.tsx` (pas
+  `LibrarySectionView`, pensee pour des items **possedes** avec notes/tags —
+  incompatible avec des lignes du dataset qui n'ont ni l'un ni l'autre) :
+  recherche texte + filtre genre en local (pas de tags dans ce dataset),
+  tape sur une ligne = `quickAddToCollectionAction`, toujours vers la
+  collection.
 - `app/(app)/library/collection/page.tsx` et
   `app/(app)/library/wishlist/[id]/page.tsx` — vue complete d'**une seule**
   section a la fois (`components/library-section-view.tsx`, partage) :
@@ -357,9 +404,16 @@ garder si on retouche cette config, sans quoi le bug revient silencieusement.
   chiffrees comme avant : la collection reste le contenu principal de la page.
 - `app/(app)/profile/page.tsx` — avatar (upload/recadrage/suppression via
   `components/avatar-uploader.tsx` + `avatar-crop-dialog.tsx`,
-  `react-easy-crop`), nom modifiable, deconnexion, suppression de compte.
+  `react-easy-crop`), nom modifiable, deconnexion, suppression de compte,
+  et **preference de genre** pour la section Decouvrir (selecteur
+  homme/femme/unisexe, `updateGenderPreferenceAction` ->
+  `user_preferences.gender_preference`).
 - `app/(app)/feedback/page.tsx` — formulaire, bouton actif a partir de 20
-  caracteres (doublee par le CHECK SQL).
+  caracteres (doublee par le CHECK SQL). Journal des nouveautes
+  (`components/changelog.tsx`) affiche en dessous, version la plus recente
+  en premier — donnees statiques maintenues a la main dans ce fichier a
+  chaque changement notable, pas de table dediee (volume trop faible pour
+  le justifier).
 
 ## UI / conventions a respecter
 

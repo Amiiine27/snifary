@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/session";
 import { FeedbackForm } from "@/components/feedback-form";
+import { Changelog } from "@/components/changelog";
 
 export default async function FeedbackPage() {
   const user = await requireUser();
@@ -24,6 +25,8 @@ export default async function FeedbackPage() {
       </div>
 
       <FeedbackForm />
+
+      <Changelog />
     </div>
   );
 }

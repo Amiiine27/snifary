@@ -3,7 +3,8 @@
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
-import { perfumes, notes, perfumeNotes, perfumeTags } from "@/db/schema";
+import { perfumes, notes, perfumeNotes, perfumeTags, collectionItems } from "@/db/schema";
+import { guessConcentration } from "@/lib/concentration";
 import { requireUser } from "@/lib/session";
 import {
   searchFragrantica,
@@ -12,7 +13,7 @@ import {
   type FragranticaCandidate,
 } from "@/lib/fragrantica";
 import { uploadImageFromUrl, uploadImageFromBuffer } from "@/lib/cloudinary";
-import { findWikipediaPerfumeImage } from "@/lib/wikipedia";
+import { findWikipediaPerfumeInfo } from "@/lib/wikipedia";
 import {
   findPerfumesByName,
   findPerfumeByFragranticaUrl,
@@ -127,13 +128,16 @@ export async function savePerfumeAction(input: SavePerfumeInput): Promise<number
   const existing = await findPerfumeByFragranticaUrl(input.draft.fragranticaUrl);
   if (existing) return existing.id;
 
-  // Le dataset local (fragrantica_reference) n'a jamais d'image : on tente
-  // Wikipedia en filet de secours uniquement dans ce cas. Best-effort, ne
-  // doit jamais faire echouer l'ajout si indisponible.
-  const imageSourceUrl =
-    input.draft.imageUrl ??
-    (await findWikipediaPerfumeImage(input.draft.name).catch(() => null));
+  // Ni le dataset local (fragrantica_reference) ni le scraping Fragrantica
+  // ne donnent de description utilisable (le champ "description" expose par
+  // Fragrantica n'est qu'un gabarit qui repete les notes, aucune valeur
+  // ajoutee) -- Wikipedia est donc la seule source pour ce champ, tentee a
+  // chaque ajout. Best-effort, ne doit jamais faire echouer l'ajout.
+  const wiki = await findWikipediaPerfumeInfo(input.draft.name).catch(
+    () => ({ image: null, description: null }) as const
+  );
 
+  const imageSourceUrl = input.draft.imageUrl ?? wiki.image;
   const imagePublicId = imageSourceUrl ? await uploadImageFromUrl(imageSourceUrl, "perfumes") : null;
 
   return insertPerfumeRow({
@@ -142,6 +146,7 @@ export async function savePerfumeAction(input: SavePerfumeInput): Promise<number
     imagePublicId,
     fragranticaUrl: input.draft.fragranticaUrl,
     inspiredBy: null,
+    description: wiki.description,
     price: input.price,
     volumeMl: input.volumeMl,
     concentration: input.concentration,
@@ -149,6 +154,50 @@ export async function savePerfumeAction(input: SavePerfumeInput): Promise<number
     tags: input.tags,
     notes: input.draft.notes,
   });
+}
+
+// Ajout direct a la collection depuis une source qui n'a pas de notion de
+// "target" (collection ou wishlist precise) comme AddPerfumeDialog -- la
+// section Decouvrir de l'accueil et les pages marque, toutes deux issues du
+// meme dataset local (fragrantica_reference). Compose resolve + save + ajout
+// collection en un seul aller-retour serveur plutot que trois actions
+// separees cote client.
+export async function quickAddToCollectionAction(fragranticaUrl: string): Promise<void> {
+  const user = await requireUser();
+
+  const existing = await findPerfumeByFragranticaUrl(fragranticaUrl);
+  let perfumeId: number;
+
+  if (existing) {
+    perfumeId = existing.id;
+  } else {
+    const reference = await findReferenceByUrl(fragranticaUrl);
+    if (!reference) throw new Error("Parfum introuvable");
+
+    perfumeId = await savePerfumeAction({
+      draft: {
+        name: reference.name,
+        brand: reference.brand,
+        gender: reference.gender,
+        imageUrl: null,
+        fragranticaUrl: reference.fragranticaUrl,
+        notes: {
+          top: splitNotesList(reference.notesTop),
+          heart: splitNotesList(reference.notesHeart),
+          base: splitNotesList(reference.notesBase),
+        },
+      },
+      price: null,
+      volumeMl: 100,
+      concentration: guessConcentration(reference.name),
+      gender: reference.gender,
+      tags: [],
+    });
+  }
+
+  await db.insert(collectionItems).values({ userId: user.id, perfumeId }).onConflictDoNothing();
+  revalidatePath("/");
+  revalidatePath("/collection");
 }
 
 export type ManualPerfumeInput = {
@@ -177,6 +226,7 @@ export async function createManualPerfumeAction(input: ManualPerfumeInput): Prom
     imagePublicId: input.imagePublicId,
     fragranticaUrl: null,
     inspiredBy: input.inspiredBy?.trim() || null,
+    description: null,
     price: input.price,
     volumeMl: input.volumeMl,
     concentration: input.concentration,
@@ -237,6 +287,7 @@ async function insertPerfumeRow(input: {
   imagePublicId: string | null;
   fragranticaUrl: string | null;
   inspiredBy: string | null;
+  description: string | null;
   price: number | null;
   volumeMl: number;
   concentration: Concentration;
@@ -252,6 +303,7 @@ async function insertPerfumeRow(input: {
       imagePublicId: input.imagePublicId,
       fragranticaUrl: input.fragranticaUrl,
       inspiredBy: input.inspiredBy,
+      description: input.description,
       price: input.price,
       volumeMl: input.volumeMl,
       concentration: input.concentration,
