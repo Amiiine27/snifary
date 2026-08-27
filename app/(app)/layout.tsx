@@ -5,7 +5,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="mx-auto flex w-full max-w-md flex-1 flex-col">
       <AppTopBar />
-      <main className="flex-1 pb-20 pt-16">{children}</main>
+      <main className="flex-1 pb-20 pt-24">{children}</main>
       <BottomNav />
     </div>
   );

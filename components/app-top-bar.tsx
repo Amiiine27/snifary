@@ -1,14 +1,18 @@
 import { ThemeToggleButton } from "@/components/theme-toggle";
+import { Tagline } from "@/components/tagline";
 
-// Barre persistante, comme BottomNav mais en haut : le logo Snifary reste
-// visible sur TOUTES les pages de l'app (home, collection, wishlists,
-// stats, profil, feedback), jamais seulement sur certaines.
+// Persistant sur toutes les pages (comme BottomNav mais en haut), mais sans
+// bandeau : flotte directement sur le fond de la page, pas de barre coloree
+// ni de ligne de separation.
 export function AppTopBar() {
   return (
-    <header className="fixed inset-x-0 top-0 z-40 border-b border-border bg-popover/95 backdrop-blur supports-backdrop-filter:bg-popover/80">
-      <div className="mx-auto grid max-w-md grid-cols-[2.5rem_1fr_2.5rem] items-center gap-2 px-3 py-2.5">
+    <header className="fixed inset-x-0 top-0 z-40">
+      <div className="mx-auto grid max-w-md grid-cols-[2.5rem_1fr_2.5rem] items-start gap-2 px-3 pt-4">
         <div />
-        <h1 className="text-center font-heading text-xl">Snifary</h1>
+        <div className="text-center">
+          <h1 className="font-heading text-xl">Snifary</h1>
+          <Tagline className="mt-0.5 text-xs text-muted-foreground" />
+        </div>
         <ThemeToggleButton />
       </div>
     </header>
