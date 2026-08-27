@@ -256,6 +256,20 @@ depuis cet ecran. Meme logique pour les fleches precedent/suivant de
 demande explicite pour ne pas suggerer un lien navigable vers les wishlists
 depuis la collection.
 
+**Suppression de fond** (`lib/remove-background.ts`, `@imgly/background-removal`,
+modele `isnet_quint8`) appliquee sur toute image uploadee manuellement (creation
+ET edition, meme composant `ManualForm` -> meme `handleFile`). **Non-bloquante** :
+si elle echoue (CDN `staticimgly.com` injoignable, WASM non supporte, etc.),
+l'image d'origine est uploadee quand meme (`console.error` + toast info) plutot
+que de bloquer tout l'ajout/edition. **Piege deja corrige** : Next.js limite le
+corps d'une requete Server Action a 1 Mo par defaut — une photo de telephone
+reencodee en PNG avec canal alpha depasse ca facilement, et `uploadPerfumeImageAction`
+(ou l'upload avatar, meme risque) echouait silencieusement avec un message
+generique "Impossible de traiter l'image" qui ne disait pas laquelle des deux
+etapes (suppression de fond vs upload) avait plante. Corrige via
+`experimental.serverActions.bodySizeLimit: "10mb"` dans `next.config.ts` — a
+garder si on retouche cette config, sans quoi le bug revient silencieusement.
+
 ## Navigation / structure des pages
 
 - `app/login/page.tsx` — hors du groupe `(app)`, seule page publique (avec
@@ -279,11 +293,12 @@ depuis la collection.
   premiere wishlist existante (ou la collection si aucune n'existe encore).
   Cible du bouton "coeur" de la bottom nav.
 - `app/(app)/stats/page.tsx` — cible du bouton "Collection"/bibliotheque de la
-  bottom nav (route `/stats` conservee, label change). Affiche une ligne
-  discrete "N parfums possedes · X€ depenses" (`aside` prop de
-  `LibrarySectionView`) **au-dessus** de la collection complete (meme
-  composant que `/library/collection`) — pas de gros chiffres en carte, la
-  collection reste le contenu principal de cette page.
+  bottom nav (route `/stats` conservee, label change). Affiche 2 chips
+  compactes ("N parfums possedes", "X€ depenses" — `StatChip` local au fichier,
+  passees via la prop `aside` de `LibrarySectionView`) **au-dessus** de la
+  collection complete (meme composant que `/library/collection`) — assez
+  visibles pour se voir au premier coup d'oeil, mais pas de grosses cartes
+  chiffrees comme avant : la collection reste le contenu principal de la page.
 - `app/(app)/profile/page.tsx` — avatar (upload/recadrage/suppression via
   `components/avatar-uploader.tsx` + `avatar-crop-dialog.tsx`,
   `react-easy-crop`), nom modifiable, deconnexion, suppression de compte.
