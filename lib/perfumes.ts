@@ -154,11 +154,11 @@ export async function getUserGenderPreference(userId: string): Promise<"homme" |
   return row?.genderPreference ?? "unisexe";
 }
 
-// Section "Decouvrir" de l'accueil : tirage aleatoire dans le dataset local
-// (fragrantica_reference, ~24k parfums toutes marques), filtre par genre
-// prefere (unisexe = pas de filtre), en excluant ce que l'utilisateur
-// possede deja. Tape dessus l'ajoute directement a la collection, meme
-// logique que la recherche (voir resolvePerfumeAction/savePerfumeAction).
+// Section "Decouvrir" (accueil ET page /discover) : tirage aleatoire dans le
+// dataset local (fragrantica_reference, ~24k parfums toutes marques), filtre
+// par genre prefere (unisexe = pas de filtre), en excluant ce que
+// l'utilisateur possede deja. Tape dessus -> ReferencePerfumeSheet (fiche
+// complete, choix collection/wishlist(s) avant d'ecrire quoi que ce soit).
 export async function getDiscoverPerfumes(
   userId: string,
   gender: "homme" | "femme" | "unisexe",
@@ -197,6 +197,21 @@ export async function getBrandCatalog(brand: string): Promise<ReferencePerfume[]
     .from(fragranticaReference)
     .where(sql`lower(${fragranticaReference.brand}) = lower(${brand})`)
     .orderBy(fragranticaReference.name);
+  return rows.map(toReferencePerfume);
+}
+
+// Recherche libre dans le dataset local pour la page /discover (version
+// "poussee" de la section Decouvrir de l'accueil) -- pas de filtre genre ici,
+// meme logique que la recherche principale (searchFragranticaReference) ou
+// une recherche par nom/marque doit tout remonter, peu importe le genre.
+export async function searchReferencePerfumes(query: string, limit = 30): Promise<ReferencePerfume[]> {
+  const term = `%${query.trim()}%`;
+  const rows = await db
+    .select()
+    .from(fragranticaReference)
+    .where(or(like(fragranticaReference.name, term), like(fragranticaReference.brand, term)))
+    .orderBy(fragranticaReference.name)
+    .limit(limit);
   return rows.map(toReferencePerfume);
 }
 

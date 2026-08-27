@@ -2,19 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Lightbulb, Library, Home, Heart, User } from "lucide-react";
+import { Lightbulb, Library, Home, Compass, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
   { href: "/feedback", icon: Lightbulb, label: "Avis", match: (p: string) => p.startsWith("/feedback") },
-  { href: "/stats", icon: Library, label: "Collection", match: (p: string) => p.startsWith("/stats") },
+  { href: "/stats", icon: Library, label: "Collection", match: (p: string) => p.startsWith("/stats") || p.startsWith("/library/wishlist") },
   { href: "/", icon: Home, label: "Accueil", match: (p: string) => p === "/" },
-  {
-    href: "/wishlists",
-    icon: Heart,
-    label: "Wishlists",
-    match: (p: string) => p.startsWith("/wishlists") || p.startsWith("/library/wishlist"),
-  },
+  { href: "/discover", icon: Compass, label: "Decouvrir", match: (p: string) => p.startsWith("/discover") },
   { href: "/profile", icon: User, label: "Profil", match: (p: string) => p.startsWith("/profile") },
 ];
 

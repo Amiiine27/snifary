@@ -2,6 +2,23 @@
 // Version la plus recente en premier.
 const CHANGELOG: { version: string; changes: string[] }[] = [
   {
+    version: "1.11",
+    changes: [
+      "Nouvelle page Decouvrir (remplace l'icone Wishlists) : 30 suggestions, recherche libre, bouton pour tirer une nouvelle selection",
+      "Les wishlists restent accessibles depuis Collection, via la fleche vers la premiere wishlist",
+    ],
+  },
+  {
+    version: "1.10",
+    changes: [
+      "Section \"Decouvrir\" sur l'accueil : suggestions de parfums selon le genre choisi dans Profil",
+      "Pages marque : tape sur une marque pour parcourir tout son catalogue",
+      "Decouvrir et les pages marque ouvrent d'abord la fiche du parfum, avec le choix de la collection et/ou d'une ou plusieurs wishlists",
+      "Prix et description modifiables sur n'importe quel parfum, meme deja ajoute",
+      "Journal des nouveautes (cette liste !)",
+    ],
+  },
+  {
     version: "1.9",
     changes: [
       "Recherche instantanee dans un catalogue de pres de 24 000 parfums, toutes marques (avant limite a Fragrantica en direct, souvent indisponible)",

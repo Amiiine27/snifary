@@ -349,11 +349,19 @@ liee au `userId` de qui a fait l'ajout.
 la collection, un seul choix a du sens -> bouton simple qui ouvre direct
 `AddPerfumeDialog`. Dans une wishlist, le "+" se deploie en 2 options (ajouter
 un parfum / creer une nouvelle wishlist) car les deux actions sont legitimes
-depuis cet ecran. Meme logique pour les fleches precedent/suivant de
-`LibrarySectionView` : elles n'existent que pour `target.kind === "wishlist"`
-(navigation entre wishlists entre elles) — la collection n'a jamais de fleches,
-demande explicite pour ne pas suggerer un lien navigable vers les wishlists
-depuis la collection.
+depuis cet ecran.
+
+**Fleches precedent/suivant** de `LibrarySectionView` : entre deux wishlists,
+navigation libre dans les deux sens. Depuis la collection (`/stats` et
+`/library/collection`), en revanche, uniquement un "next" vers la premiere
+wishlist — jamais de "prev" (la collection est toujours le point de depart).
+Depuis une wishlist, le "prev" ne remonte jamais jusqu'a la collection non
+plus, seulement vers la wishlist precedente — demande explicite d'origine
+pour ne pas suggerer un lien navigable *retour* vers la collection depuis
+une wishlist. **C'est ce fil collection -> wishlist1 -> wishlist2 -> ...
+qui fait office de "carrousel"** maintenant que `/wishlists` a ete retire de
+la nav (voir plus haut) : la collection (bouton "Collection" de la nav) est
+devenue le seul point d'entree vers les wishlists.
 
 **Suppression de fond** (`lib/remove-background.ts`, `@imgly/background-removal`,
 modele `isnet_quint8`) appliquee sur toute image uploadee manuellement (creation
@@ -377,14 +385,19 @@ garder si on retouche cette config, sans quoi le bug revient silencieusement.
 - `app/(app)/layout.tsx` — coque partagee par toutes les pages connectees :
   `AppTopBar` (fixe en haut, flottant SANS fond/bordure — logo "Snifary" +
   tagline aleatoire + toggle theme, cf section UI) et `BottomNav` (fixe en
-  bas, 5 icones : Avis/Collection/Accueil/Wishlists/Profil).
+  bas, 5 icones : Avis/Collection/Accueil/Decouvrir/Profil). **Plus d'icone
+  "Wishlists" dediee** (retiree, demande explicite) : les wishlists restent
+  atteignables depuis Collection via le carrousel prev/next deja existant
+  (voir plus bas), elles n'ont juste plus leur propre point d'entree direct
+  dans la nav — ce slot accueille desormais Decouvrir.
 - `app/(app)/page.tsx` (Accueil) — section **"Decouvrir"** en tout premier
   (`components/discover-section.tsx`) : tirage aleatoire de 12 parfums dans
   `fragrantica_reference` (~24k, toutes marques), filtre par
   `userPreferences.genderPreference` (reglable dans Profil, defaut
   `unisexe` = pas de filtre), en excluant ce que l'utilisateur possede deja.
   Jamais d'image (le dataset n'en a pas) — cartes compactes en scroll
-  horizontal plutot que le grid a vignettes utilise ailleurs. Puis apercu de
+  horizontal plutot que le grid a vignettes utilise ailleurs. Lien "voir
+  tout" -> `/discover` (version detaillee, voir plus bas). Puis apercu de
   chaque section (collection d'abord, puis chaque wishlist dans l'ordre de
   `position`), lien "voir tout" vers la page dediee. Bouton "+ Nouvelle
   wishlist" en bas.
@@ -415,10 +428,21 @@ garder si on retouche cette config, sans quoi le bug revient silencieusement.
   grille/liste, modal de filtres, `AddFab`. Navigation prev/next **limitee aux
   wishlists entre elles** (la collection n'est jamais accessible depuis une
   wishlist par ces fleches, demande explicite) ; la collection n'a pas de
-  prev, et son next pointe vers la premiere wishlist.
-- `app/(app)/wishlists/page.tsx` — pas de contenu propre, redirige vers la
-  premiere wishlist existante (ou la collection si aucune n'existe encore).
-  Cible du bouton "coeur" de la bottom nav.
+  prev, et son next pointe vers la premiere wishlist. **C'est ce carrousel
+  prev/next, ancre sur `/stats` (bouton "Collection" de la nav), qui sert
+  maintenant de seul chemin vers les wishlists** — `app/(app)/wishlists/page.tsx`
+  (redirection vers la premiere wishlist, ex-cible du bouton "coeur") a ete
+  supprime : redondant, la nav "Collection" y menait deja via le "next".
+- `app/(app)/discover/page.tsx` — version detaillee de la section Decouvrir
+  de l'accueil, cible du bouton "Decouvrir" de la bottom nav (remplace
+  l'ancien "coeur"/Wishlists). `components/discover-page-view.tsx` : 30
+  suggestions au depart (`getDiscoverPerfumes(..., 30)`), recherche libre
+  dans tout `fragrantica_reference` (`searchReferencePerfumes`, pas de
+  filtre genre — coherent avec la recherche principale), filtre genre en
+  plus (s'applique aussi bien au tirage qu'aux resultats de recherche,
+  cote client), bouton "Autre selection" (`refreshDiscoverPerfumesAction`)
+  pour retirer un nouveau lot sans quitter la page. Meme
+  `ReferencePerfumeSheet` que Decouvrir/pages marque au tap.
 - `app/(app)/stats/page.tsx` — cible du bouton "Collection"/bibliotheque de la
   bottom nav (route `/stats` conservee, label change). Affiche 2 chips
   compactes ("N parfums possedes", "X€ depenses" — `StatChip` local au fichier,

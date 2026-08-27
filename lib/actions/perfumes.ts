@@ -19,7 +19,10 @@ import {
   findPerfumesByName,
   findPerfumeByFragranticaUrl,
   searchFragranticaReference,
+  searchReferencePerfumes,
   findReferenceByUrl,
+  getDiscoverPerfumes,
+  getUserGenderPreference,
 } from "@/lib/perfumes";
 import { addItemToWishlistAction } from "@/lib/actions/wishlists";
 
@@ -35,6 +38,22 @@ export async function searchLocalPerfumesAction(query: string) {
   const trimmed = query.trim();
   if (trimmed.length < 2) return [];
   return findPerfumesByName(trimmed);
+}
+
+// Recherche libre pour la page /discover (version detaillee de la section
+// Decouvrir de l'accueil).
+export async function searchDiscoverPerfumesAction(query: string) {
+  await requireUser();
+  const trimmed = query.trim();
+  if (trimmed.length < 2) return [];
+  return searchReferencePerfumes(trimmed);
+}
+
+// Nouveau tirage aleatoire sans quitter /discover (bouton "Autre selection").
+export async function refreshDiscoverPerfumesAction() {
+  const user = await requireUser();
+  const gender = await getUserGenderPreference(user.id);
+  return getDiscoverPerfumes(user.id, gender, 30);
 }
 
 // Etape 1b : propose des fiches Fragrantica non encore connues. Deux sources

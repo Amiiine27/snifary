@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Droplet } from "lucide-react";
+import Link from "next/link";
+import { ChevronRight, Droplet } from "lucide-react";
 import type { ReferencePerfume } from "@/lib/perfumes";
 import { ReferencePerfumeSheet } from "@/components/reference-perfume-sheet";
 
@@ -25,7 +26,10 @@ export function DiscoverSection({
 
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="font-heading text-xl">Decouvrir</h2>
+      <Link href="/discover" className="flex items-center justify-between">
+        <h2 className="font-heading text-xl">Decouvrir</h2>
+        <ChevronRight className="size-5 text-muted-foreground" />
+      </Link>
       <div className="flex gap-3 overflow-x-auto pb-1">
         {perfumes.map((p) => (
           <button
