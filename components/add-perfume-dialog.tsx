@@ -527,14 +527,26 @@ export function ManualForm({
   async function handleFile(file: File | undefined) {
     if (!file) return;
     setUploading(true);
+
+    // La suppression de fond est un plus, pas une condition bloquante : si
+    // elle echoue (reseau, CDN du modele injoignable, etc.) on continue avec
+    // l'image d'origine plutot que d'empecher tout l'ajout du parfum.
+    let toUpload: Blob = file;
     try {
-      const cleaned = await removeImageBackground(file);
-      const cleanedFile = new File([cleaned], "perfume.png", { type: "image/png" });
-      const publicId = await uploadPerfumeImageAction(cleanedFile);
+      toUpload = await removeImageBackground(file);
+    } catch (err) {
+      console.error("Suppression de fond echouee, image originale conservee :", err);
+      toast.info("Suppression du fond indisponible, image d'origine conservee");
+    }
+
+    try {
+      const uploadFile = new File([toUpload], "perfume.png", { type: toUpload.type || file.type });
+      const publicId = await uploadPerfumeImageAction(uploadFile);
       setImagePublicId(publicId);
-      setImagePreview(URL.createObjectURL(cleaned));
-    } catch {
-      toast.error("Impossible de traiter l'image");
+      setImagePreview(URL.createObjectURL(toUpload));
+    } catch (err) {
+      console.error("Upload de l'image echoue :", err);
+      toast.error("Impossible d'uploader l'image");
     } finally {
       setUploading(false);
     }
