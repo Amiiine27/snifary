@@ -2,6 +2,13 @@
 // Version la plus recente en premier.
 const CHANGELOG: { version: string; changes: string[] }[] = [
   {
+    version: "1.20",
+    changes: [
+      "Vraies photos de flacon sur Decouvrir, les pages marque et \"Vous pourriez aimer\" (avant : icone generique)",
+      "Ajout d'un parfum : image trouvee de facon beaucoup plus fiable qu'avant",
+    ],
+  },
+  {
     version: "1.19",
     changes: [
       "App responsive sur tablette et PC : la coque, les grilles et les menus s'adaptent a l'ecran",

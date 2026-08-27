@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ChevronLeft, Search } from "lucide-react";
 import type { ReferencePerfume } from "@/lib/perfumes";
 import { ReferencePerfumeSheet } from "@/components/reference-perfume-sheet";
+import { ReferencePerfumeThumb } from "@/components/reference-perfume-thumb";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -89,9 +90,10 @@ export function BrandCatalogView({
             <button
               key={p.fragranticaUrl}
               onClick={() => setSelected(p)}
-              className="rounded-lg border border-border p-3 text-left text-sm font-medium transition-colors hover:bg-muted"
+              className="flex items-center gap-3 rounded-lg border border-border p-3 text-left transition-colors hover:bg-muted"
             >
-              {p.name}
+              <ReferencePerfumeThumb imageUrl={p.imageUrl} name={p.name} className="size-12 shrink-0" iconClassName="size-5" />
+              <span className="text-sm font-medium">{p.name}</span>
             </button>
           ))}
         </div>

@@ -227,15 +227,44 @@ Leve" au lieu de "Lève") — limite connue et acceptee du dataset, pas un bug.
 Script d'import ponctuel supprime apres usage (meme convention que les
 scripts de migration Drizzle, voir plus haut) ; le CSV source vit hors repo.
 
+**Images via le CDN Fragrantica (`fimgsImageUrl`/`findFimgsImage`,
+`lib/fragrantica.ts`) : source prioritaire, avant Open Beauty Facts et
+Wikipedia.** Fragrantica sert ses photos depuis un sous-domaine CDN separe,
+`fimgs.net`, qui n'est PAS derriere le meme challenge Cloudflare que le
+reste du site (voir plus haut) — verifie manuellement (`curl`, `WebFetch`,
+echantillon aleatoire de `fragrantica_reference` incluant des marques tres
+confidentielles comme "O Boticario" ou "Miguel Matos") : 100% de reussite,
+vraies photos distinctes a chaque fois, `robots.txt` de ce sous-domaine
+n'interdisant que le crawler de la Wayback Machine. Pattern simple et
+predictible : `https://fimgs.net/mdimg/perfume/o.<id>.jpg`, ou `<id>` est le
+nombre en fin d'URL Fragrantica (ex. `Sauvage-31861.html` -> `31861`), deja
+present sur toute ligne `fragrantica_reference` ET tout parfum scrape en
+direct — aucune requete reseau supplementaire pour l'obtenir. Deux usages
+distincts, volontairement asymetriques : `fimgsImageUrl` (pure, pas de
+verification) sert a l'**affichage** — `toReferencePerfume` dans
+`lib/perfumes.ts` la calcule pour chaque `ReferencePerfume`, et
+`ReferencePerfumeThumb` (`components/reference-perfume-thumb.tsx`, partagee
+par Decouvrir, pages marque, "Vous pourriez aimer" et `ReferencePerfumeSheet`)
+gere le rare cas d'echec avec un repli visuel (`onError`) plutot qu'un
+aller-retour reseau par carte dans une liste de 30+ resultats. `findFimgsImage`
+(avec verification HEAD) sert a la **sauvegarde** — `findImageAndDescription`
+(`lib/actions/perfumes.ts`) s'y fie avant de lancer un upload Cloudinary,
+pour ne jamais faire echouer tout un `savePerfumeAction` sur une image
+absente. Contrairement a Open Beauty Facts/Wikipedia (matching flou par nom,
+avec les faux positifs deja rencontres ci-dessous), c'est une correspondance
+**exacte** par id — aucun risque de confondre deux parfums.
+
 **Image ET description Wikipedia en filet de secours (`lib/wikipedia.ts`,
-`findWikipediaPerfumeInfo`)** : les fiches resolues via `fragrantica_reference`
-n'ont jamais d'image, et ni ce dataset ni le scraping Fragrantica ne donnent
-de description utilisable (le champ "description" expose par Fragrantica
-n'est qu'un gabarit auto-genere qui repete les notes deja affichees
-ailleurs — verifie sur plusieurs fiches, aucune valeur ajoutee, delibere-
-ment pas utilise). `savePerfumeAction` tente donc Wikipedia (API MediaWiki
-publique, pas de souci ToS) a chaque ajout pour la description, et
-seulement quand `draft.imageUrl` est deja `null` pour l'image.
+`findWikipediaPerfumeInfo`)** : reste utile pour la description (fimgs.net et
+Open Beauty Facts n'en fournissent aucune) et pour l'image dans les cas rares
+ou fimgs.net et Open Beauty Facts echouent tous les deux. Ni `fragrantica_reference`
+ni le scraping Fragrantica ne donnent de description utilisable (le champ
+"description" expose par Fragrantica n'est qu'un gabarit auto-genere qui
+repete les notes deja affichees ailleurs — verifie sur plusieurs fiches,
+aucune valeur ajoutee, deliberement pas utilise). `savePerfumeAction` tente
+donc Wikipedia (API MediaWiki publique, pas de souci ToS) a chaque ajout pour
+la description, et seulement quand aucune des sources precedentes n'a trouve
+d'image.
 `perfumes.description` (colonne texte nullable, migration `0004`) stocke le
 resultat, affiche dans `PerfumeDetailSheet`. **Volontairement tres
 restrictif** suite a des faux positifs constates en test : une premiere
@@ -255,8 +284,8 @@ taux de succes faible (~10-15% en test manuel) mais aucun faux positif
 constate — mieux vaut ne pas
 trouver d'image que d'en attribuer une fausse a la mauvaise fiche.
 
-**Open Beauty Facts (`lib/openbeautyfacts.ts`) : deuxieme source d'image,
-essayee AVANT Wikipedia.** Base ouverte et collaborative (soeur d'Open Food
+**Open Beauty Facts (`lib/openbeautyfacts.ts`) : deuxieme source d'image
+(apres fimgs.net), essayee AVANT Wikipedia.** Base ouverte et collaborative (soeur d'Open Food
 Facts, licence Open Database License), API publique faite pour un usage
 programmatique — pas de souci ToS ici non plus. Couverture testee a la
 main : solide sur les grosses marques (Dior, Chanel, Armani, YSL, Givenchy,
@@ -522,8 +551,10 @@ formulaire) tant que la photo n'etait pas uploadee.
   `fragrantica_reference` (~24k, toutes marques), filtre par
   `userPreferences.genderPreference` (reglable dans Profil, defaut
   `unisexe` = pas de filtre), en excluant ce que l'utilisateur possede deja.
-  Jamais d'image (le dataset n'en a pas) — cartes compactes en scroll
-  horizontal plutot que le grid a vignettes utilise ailleurs. Lien "voir
+  Cartes compactes en scroll horizontal (pas le grid a vignettes utilise
+  ailleurs) avec une image (`ReferencePerfumeThumb`, voir section Scraping —
+  construite depuis le CDN `fimgs.net`, jamais verifiee cote affichage, repli
+  visuel en cas d'echec rare). Lien "voir
   tout" -> `/discover` (version detaillee, voir plus bas). Puis apercu de
   chaque section (collection d'abord, puis chaque wishlist dans l'ordre de
   `position`), lien "voir tout" vers la page dediee. Bouton "+ Nouvelle
@@ -542,6 +573,8 @@ formulaire) tant que la photo n'etait pas uploadee.
   `LibrarySectionView`, pensee pour des items **possedes** avec notes/tags —
   incompatible avec des lignes du dataset qui n'ont ni l'un ni l'autre) :
   recherche texte + filtre genre en local (pas de tags dans ce dataset).
+  Chaque ligne affiche une vignette `ReferencePerfumeThumb` (voir section
+  Scraping) a gauche du nom.
 - **Decouvrir et les pages marque n'ajoutent jamais directement** : tape sur
   un parfum -> `ReferencePerfumeSheet` (`components/reference-perfume-sheet.tsx`)
   affiche sa fiche complete (notes, genre) avec deux champs optionnels

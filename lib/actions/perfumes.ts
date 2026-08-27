@@ -10,6 +10,7 @@ import { requireUser } from "@/lib/session";
 import {
   searchFragrantica,
   scrapeFragranticaPerfume,
+  findFimgsImage,
   type ScrapedPerfume,
   type FragranticaCandidate,
 } from "@/lib/fragrantica";
@@ -146,18 +147,24 @@ export type SavePerfumeInput = {
 };
 
 // Image + description pour un parfum qu'on s'apprete a ecrire en base.
-// Trois sources, dans cet ordre de priorite pour l'image :
+// Quatre sources, dans cet ordre de priorite pour l'image :
 //  1. Une image deja trouvee (scraping Fragrantica live) -- rare aujourd'hui,
 //     la plupart des ajouts passent par le dataset local qui n'en a jamais.
-//  2. Open Beauty Facts (lib/openbeautyfacts.ts) : vraie photo produit, base
+//  2. Le CDN images de Fragrantica (fimgs.net, lib/fragrantica.ts) : construit
+//     a partir de l'id dans fragranticaUrl, verifie par HEAD avant de s'y fier
+//     (voir findFimgsImage) -- correspondance exacte, pas de risque de faux
+//     positif contrairement aux deux sources suivantes qui matchent par nom.
+//     Couvre la quasi-totalite des ajouts passant par le dataset local.
+//  3. Open Beauty Facts (lib/openbeautyfacts.ts) : vraie photo produit, base
 //     ouverte a l'usage programmatique. Solide sur les grosses marques,
 //     quasi vide sur le niche (verifie manuellement).
-//  3. Wikipedia (lib/wikipedia.ts) : filet de secours, tres restrictif.
+//  4. Wikipedia (lib/wikipedia.ts) : filet de secours, tres restrictif.
 // La description ne vient que de Wikipedia (seule source des trois a en
-// avoir une). Les deux appels reseau tournent en parallele, jamais bloquant.
+// avoir une). Tous les appels reseau tournent en parallele, jamais bloquant.
 async function findImageAndDescription(
   name: string,
   brand: string,
+  fragranticaUrl: string,
   existingImageUrl: string | null
 ): Promise<{ imageUrl: string | null; description: string | null }> {
   if (existingImageUrl) {
@@ -165,12 +172,13 @@ async function findImageAndDescription(
     return { imageUrl: existingImageUrl, description: wiki.description };
   }
 
-  const [obfImage, wiki] = await Promise.all([
+  const [fimgsImage, obfImage, wiki] = await Promise.all([
+    findFimgsImage(fragranticaUrl).catch(() => null),
     findOpenBeautyFactsImage(name, brand).catch(() => null),
     findWikipediaPerfumeInfo(name).catch(() => ({ image: null, description: null }) as const),
   ]);
 
-  return { imageUrl: obfImage ?? wiki.image, description: wiki.description };
+  return { imageUrl: fimgsImage ?? obfImage ?? wiki.image, description: wiki.description };
 }
 
 // Etape 3 : l'utilisateur valide le brouillon (potentiellement corrige) ->
@@ -184,6 +192,7 @@ export async function savePerfumeAction(input: SavePerfumeInput): Promise<number
   const { imageUrl, description } = await findImageAndDescription(
     input.draft.name,
     input.draft.brand,
+    input.draft.fragranticaUrl,
     input.draft.imageUrl
   );
 
@@ -225,7 +234,12 @@ async function resolveAndSaveReferencePerfume(fragranticaUrl: string, price: num
   const reference = await findReferenceByUrl(fragranticaUrl);
   if (!reference) throw new Error("Parfum introuvable");
 
-  const { imageUrl, description } = await findImageAndDescription(reference.name, reference.brand, null);
+  const { imageUrl, description } = await findImageAndDescription(
+    reference.name,
+    reference.brand,
+    reference.fragranticaUrl,
+    null
+  );
   const imagePublicId = imageUrl ? await uploadImageFromUrl(imageUrl, "perfumes") : null;
 
   return insertPerfumeRow({

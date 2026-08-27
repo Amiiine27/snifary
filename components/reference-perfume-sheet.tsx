@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Droplet } from "lucide-react";
 import type { ReferencePerfume } from "@/lib/perfumes";
 import { saveReferencePerfumeAction } from "@/lib/actions/perfumes";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -11,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { NotesRow } from "@/components/perfume-detail-sheet";
 import { SimilarPerfumesSection } from "@/components/similar-perfumes-section";
+import { ReferencePerfumeThumb } from "@/components/reference-perfume-thumb";
 
 // Fiche d'un parfum pas encore dans `perfumes` (issu de Decouvrir ou d'une
 // page marque, donc de fragrantica_reference). Contrairement a l'ancien
@@ -92,9 +92,13 @@ function Body({
   return (
     <>
       <SheetHeader className="items-center text-center">
-        <div className="mb-2 flex size-16 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-          <Droplet className="size-8" />
-        </div>
+        <ReferencePerfumeThumb
+          imageUrl={perfume.imageUrl}
+          name={perfume.name}
+          className="mb-2 h-40 w-32 shrink-0 rounded-lg"
+          iconClassName="size-10"
+          sizes="200px"
+        />
         <SheetTitle className="text-xl">{perfume.name}</SheetTitle>
         <p className="text-base text-muted-foreground">{perfume.brand}</p>
       </SheetHeader>

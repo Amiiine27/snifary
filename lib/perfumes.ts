@@ -14,6 +14,7 @@ import {
 } from "@/db/schema";
 import { cloudinaryUrl } from "@/lib/cloudinary";
 import { splitNotesList } from "@/lib/notes";
+import { fimgsImageUrl } from "@/lib/fragrantica";
 
 export type PerfumeCard = {
   id: number;
@@ -129,6 +130,7 @@ export type ReferencePerfume = {
   name: string;
   brand: string;
   gender: "homme" | "femme" | "unisexe";
+  imageUrl: string | null;
   notes: { top: string[]; heart: string[]; base: string[] };
 };
 
@@ -138,6 +140,11 @@ function toReferencePerfume(r: typeof fragranticaReference.$inferSelect): Refere
     name: r.name,
     brand: r.brand,
     gender: r.gender,
+    // Construite a partir de l'id Fragrantica, jamais verifiee ici (voir
+    // fimgsImageUrl) -- l'UI gere le rare cas d'echec avec un repli visuel
+    // (onError), pas la peine d'un aller-retour reseau pour chaque ligne
+    // d'une liste de 30+ resultats.
+    imageUrl: fimgsImageUrl(r.fragranticaUrl),
     notes: {
       top: splitNotesList(r.notesTop),
       heart: splitNotesList(r.notesHeart),

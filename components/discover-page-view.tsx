@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Droplet, Search, Shuffle, Loader2 } from "lucide-react";
+import { Search, Shuffle, Loader2 } from "lucide-react";
 import type { ReferencePerfume } from "@/lib/perfumes";
 import { searchDiscoverPerfumesAction, refreshDiscoverPerfumesAction } from "@/lib/actions/perfumes";
 import { ReferencePerfumeSheet } from "@/components/reference-perfume-sheet";
+import { ReferencePerfumeThumb } from "@/components/reference-perfume-thumb";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -127,9 +128,7 @@ export function DiscoverPageView({
               onClick={() => setSelected(p)}
               className="flex flex-col items-start gap-2 rounded-xl border border-border p-3 text-left transition-colors hover:bg-muted"
             >
-              <div className="flex size-9 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                <Droplet className="size-4" />
-              </div>
+              <ReferencePerfumeThumb imageUrl={p.imageUrl} name={p.name} className="aspect-square w-full" />
               <div className="min-w-0">
                 <p className="line-clamp-2 text-sm font-medium leading-tight">{p.name}</p>
                 <p className="line-clamp-1 text-xs text-muted-foreground">{p.brand}</p>

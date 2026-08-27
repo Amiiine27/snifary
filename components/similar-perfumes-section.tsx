@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Droplet, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import type { ReferencePerfume, SimilarPerfumeSource } from "@/lib/perfumes";
 import { getSimilarPerfumesAction } from "@/lib/actions/perfumes";
+import { ReferencePerfumeThumb } from "@/components/reference-perfume-thumb";
 
 // "Vous pourriez aimer", partagee entre PerfumeDetailSheet (parfum deja
 // possede) et ReferencePerfumeSheet (parfum pas encore ajoute) -- les deux
@@ -55,9 +56,7 @@ export function SimilarPerfumesSection({
               onClick={() => onSelect(p)}
               className="flex w-32 shrink-0 flex-col items-start gap-2 rounded-xl border border-border p-3 text-left transition-colors hover:bg-muted"
             >
-              <div className="flex size-8 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                <Droplet className="size-3.5" />
-              </div>
+              <ReferencePerfumeThumb imageUrl={p.imageUrl} name={p.name} className="aspect-square w-full" iconClassName="size-5" />
               <div className="min-w-0">
                 <p className="line-clamp-2 text-xs font-medium leading-tight">{p.name}</p>
                 <p className="line-clamp-1 text-[11px] text-muted-foreground">{p.brand}</p>

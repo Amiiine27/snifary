@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       { protocol: "https", hostname: "res.cloudinary.com" },
       { protocol: "https", hostname: "lh3.googleusercontent.com" }, // avatar Google par defaut
+      { protocol: "https", hostname: "fimgs.net" }, // CDN images Fragrantica, hors du challenge Cloudflare du site principal
     ],
   },
   experimental: {
