@@ -44,7 +44,7 @@ export function LibrarySectionView({
   );
 
   return (
-    <div className="flex flex-col gap-5 px-4 pt-20">
+    <div className="flex flex-col gap-5 px-4 pt-4">
       {aside && <div className="-mb-2 text-center text-sm text-muted-foreground">{aside}</div>}
 
       <div className="flex items-center justify-between">

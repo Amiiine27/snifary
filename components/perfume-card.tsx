@@ -54,7 +54,7 @@ function Thumb({
   return (
     <div className={cn("relative overflow-hidden rounded-md bg-muted", className)}>
       {imageUrl ? (
-        <Image src={imageUrl} alt={name} fill sizes="200px" className="object-cover" />
+        <Image src={imageUrl} alt={name} fill sizes="200px" className="object-contain p-1" />
       ) : (
         <div className="flex size-full items-center justify-center text-muted-foreground">
           <Droplet className="size-6" />

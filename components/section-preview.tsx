@@ -34,7 +34,7 @@ export function SectionPreview({
             <div key={p.id} className="flex flex-col gap-1.5">
               <div className="relative aspect-square overflow-hidden rounded-xl bg-muted">
                 {p.imageUrl ? (
-                  <Image src={p.imageUrl} alt={p.name} fill sizes="200px" className="object-cover" />
+                  <Image src={p.imageUrl} alt={p.name} fill sizes="200px" className="object-contain p-2" />
                 ) : (
                   <div className="flex size-full items-center justify-center text-muted-foreground">
                     <Droplet className="size-7" />

@@ -2,15 +2,12 @@ import { requireUser } from "@/lib/session";
 import { AvatarUploader } from "@/components/avatar-uploader";
 import { ProfileForm } from "@/components/profile-form";
 import { AccountActions } from "@/components/account-actions";
-import { BrandHeader } from "@/components/brand-header";
 
 export default async function ProfilePage() {
   const user = await requireUser();
 
   return (
-    <div className="flex flex-col gap-8 px-4 pt-6">
-      <BrandHeader />
-
+    <div className="flex flex-col gap-8 px-4 pt-4">
       <AvatarUploader name={user.name} image={user.image ?? null} />
 
       <ProfileForm name={user.name} email={user.email} />
