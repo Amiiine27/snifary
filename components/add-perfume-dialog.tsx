@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Search, Loader2, AlertCircle } from "lucide-react";
+import { Search, Loader2, AlertCircle, Plus, Upload } from "lucide-react";
 import type { ScrapedPerfume } from "@/lib/fragrantica";
 import type { PerfumeCard as PerfumeCardData } from "@/lib/perfumes";
 import {
@@ -10,6 +10,9 @@ import {
   searchFragranticaCandidatesAction,
   resolvePerfumeAction,
   savePerfumeAction,
+  createManualPerfumeAction,
+  uploadPerfumeImageAction,
+  type ManualPerfumeInput,
 } from "@/lib/actions/perfumes";
 import { addToCollectionAction } from "@/lib/actions/collection";
 import { addItemToWishlistAction } from "@/lib/actions/wishlists";
@@ -28,6 +31,7 @@ import {
 
 type Target = { kind: "collection" } | { kind: "wishlist"; wishlistId: number };
 type FragranticaCandidate = { url: string; title: string };
+type View = "search" | "confirm" | "manual";
 
 const TAG_OPTIONS = [
   { value: "printemps", label: "Printemps" },
@@ -38,6 +42,14 @@ const TAG_OPTIONS = [
   { value: "nuit", label: "Nuit" },
 ] as const;
 
+type MetaValues = {
+  price: number | null;
+  volumeMl: number;
+  concentration: "edt" | "edp" | "parfum" | "extrait" | "cologne" | null;
+  gender: "homme" | "femme" | "unisexe";
+  tags: (typeof TAG_OPTIONS)[number]["value"][];
+};
+
 export function AddPerfumeDialog({
   target,
   open,
@@ -47,6 +59,7 @@ export function AddPerfumeDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const [view, setView] = useState<View>("search");
   const [query, setQuery] = useState("");
 
   const [localResults, setLocalResults] = useState<PerfumeCardData[] | null>(null);
@@ -63,7 +76,7 @@ export function AddPerfumeDialog({
 
   // Recherche locale : quasi instantanee, jamais bloquee par le reseau.
   useEffect(() => {
-    if (!open || queryTooShort) return;
+    if (!open || view !== "search" || queryTooShort) return;
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- etat de chargement du debounce, pattern recherche standard
     setLocalSearching(true);
@@ -81,12 +94,12 @@ export function AddPerfumeDialog({
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [query, open, queryTooShort]);
+  }, [query, open, view, queryTooShort]);
 
   // Recherche Fragrantica : plus lente et moins fiable (reseau externe), a
   // part pour ne jamais bloquer l'affichage des resultats locaux ci-dessus.
   useEffect(() => {
-    if (!open || queryTooShort) return;
+    if (!open || view !== "search" || queryTooShort) return;
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- etat de chargement du debounce, pattern recherche standard
     setRemoteSearching(true);
@@ -108,9 +121,10 @@ export function AddPerfumeDialog({
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [query, open, queryTooShort]);
+  }, [query, open, view, queryTooShort]);
 
   function reset() {
+    setView("search");
     setQuery("");
     setLocalResults(null);
     setRemoteResults(null);
@@ -150,6 +164,7 @@ export function AddPerfumeDialog({
           reset();
         } else {
           setDraft(result.draft);
+          setView("confirm");
         }
       } catch {
         toast.error("Impossible de recuperer cette fiche Fragrantica");
@@ -162,8 +177,7 @@ export function AddPerfumeDialog({
     !localSearching &&
     !remoteSearching &&
     (localResults?.length ?? 0) === 0 &&
-    (remoteResults?.length ?? 0) === 0 &&
-    !remoteError;
+    (remoteResults?.length ?? 0) === 0;
 
   return (
     <Dialog
@@ -173,38 +187,43 @@ export function AddPerfumeDialog({
         if (!v) reset();
       }}
     >
-      <DialogContent className="flex max-h-[85vh] w-[calc(100%-2rem)] max-w-md flex-col overflow-hidden sm:max-w-md">
+      <DialogContent className="flex h-[80vh] w-[calc(100%-2rem)] max-w-md flex-col overflow-hidden sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-xl">{draft ? "Confirme les infos" : "Ajouter un parfum"}</DialogTitle>
+          <DialogTitle className="text-xl">
+            {view === "confirm" && "Confirme les infos"}
+            {view === "manual" && "Ajouter manuellement"}
+            {view === "search" && "Ajouter un parfum"}
+          </DialogTitle>
         </DialogHeader>
 
-        {!draft ? (
-            <div className="flex flex-col gap-4 overflow-y-auto">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  autoFocus
-                  className="pl-8"
-                  placeholder="Nom du parfum..."
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
-              </div>
+        {view === "search" && (
+          <div className="flex flex-1 flex-col gap-4 overflow-y-auto">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                autoFocus
+                className="pl-8"
+                placeholder="Nom du parfum..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
 
-              {localResults && localResults.length > 0 && (
-                <ResultGroup title="Deja dans Snifary">
-                  {localResults.map((p) => (
-                    <ResultRow
-                      key={p.id}
-                      title={p.name}
-                      subtitle={p.brand}
-                      disabled={pending}
-                      onClick={() => handlePickExisting(p.id)}
-                    />
-                  ))}
-                </ResultGroup>
-              )}
+            {localResults && localResults.length > 0 && (
+              <ResultGroup title="Deja dans Snifary">
+                {localResults.map((p) => (
+                  <ResultRow
+                    key={p.id}
+                    title={p.name}
+                    subtitle={p.brand}
+                    disabled={pending}
+                    onClick={() => handlePickExisting(p.id)}
+                  />
+                ))}
+              </ResultGroup>
+            )}
 
+            {!queryTooShort && (
               <ResultGroup title="Sur Fragrantica">
                 {remoteSearching && (
                   <p className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -228,31 +247,61 @@ export function AddPerfumeDialog({
                   <p className="text-sm text-muted-foreground">Aucun resultat</p>
                 )}
               </ResultGroup>
+            )}
 
-              {noResultsAtAll && <p className="text-sm text-muted-foreground">Aucun resultat</p>}
-            </div>
-          ) : (
-            <div className="overflow-y-auto">
-              <ConfirmForm
-                draft={draft}
-                pending={pending}
-                onCancel={() => setDraft(null)}
-                onConfirm={(values) => {
-                  startTransition(async () => {
-                    try {
-                      const perfumeId = await savePerfumeAction({ draft, ...values });
-                      await addPerfumeIdToTarget(perfumeId);
-                      toast.success("Parfum ajoute");
-                      onOpenChange(false);
-                      reset();
-                    } catch {
-                      toast.error("Impossible d'enregistrer ce parfum");
-                    }
-                  });
-                }}
-              />
-            </div>
-          )}
+            {noResultsAtAll && (
+              <Button variant="outline" onClick={() => setView("manual")}>
+                <Plus /> Ajouter un parfum manuellement
+              </Button>
+            )}
+          </div>
+        )}
+
+        {view === "confirm" && draft && (
+          <div className="flex-1 overflow-y-auto">
+            <ConfirmForm
+              draft={draft}
+              pending={pending}
+              onCancel={() => setView("search")}
+              onConfirm={(values) => {
+                startTransition(async () => {
+                  try {
+                    const perfumeId = await savePerfumeAction({ draft, ...values });
+                    await addPerfumeIdToTarget(perfumeId);
+                    toast.success("Parfum ajoute");
+                    onOpenChange(false);
+                    reset();
+                  } catch {
+                    toast.error("Impossible d'enregistrer ce parfum");
+                  }
+                });
+              }}
+            />
+          </div>
+        )}
+
+        {view === "manual" && (
+          <div className="flex-1 overflow-y-auto">
+            <ManualForm
+              initialName={query}
+              pending={pending}
+              onCancel={() => setView("search")}
+              onConfirm={(input) => {
+                startTransition(async () => {
+                  try {
+                    const perfumeId = await createManualPerfumeAction(input);
+                    await addPerfumeIdToTarget(perfumeId);
+                    toast.success("Parfum ajoute");
+                    onOpenChange(false);
+                    reset();
+                  } catch {
+                    toast.error("Impossible d'enregistrer ce parfum");
+                  }
+                });
+              }}
+            />
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -290,54 +339,19 @@ function ResultRow({
   );
 }
 
-type ConfirmValues = {
-  price: number | null;
-  volumeMl: number;
-  concentration: "edt" | "edp" | "parfum" | "extrait" | "cologne" | null;
-  gender: "homme" | "femme" | "unisexe";
-  tags: (typeof TAG_OPTIONS)[number]["value"][];
-};
-
-function ConfirmForm({
-  draft,
-  pending,
-  onCancel,
-  onConfirm,
-}: {
-  draft: ScrapedPerfume;
-  pending: boolean;
-  onCancel: () => void;
-  onConfirm: (values: ConfirmValues) => void;
-}) {
-  const [price, setPrice] = useState("");
-  const [volumeMl, setVolumeMl] = useState("100");
-  const [concentration, setConcentration] = useState<string>("none");
-  const [gender, setGender] = useState<ConfirmValues["gender"]>(draft.gender);
-  const [tags, setTags] = useState<ConfirmValues["tags"]>([]);
-
-  const totalNotes = useMemo(
-    () => draft.notes.top.length + draft.notes.heart.length + draft.notes.base.length,
-    [draft]
-  );
-
+// Champs communs (prix, contenance, concentration, genre, categories) partages
+// entre la confirmation d'un brouillon scrape et la saisie 100% manuelle.
+function MetaFields({ value, onChange }: { value: MetaValues; onChange: (v: MetaValues) => void }) {
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <p className="font-medium">{draft.name}</p>
-        <p className="text-sm text-muted-foreground">{draft.brand}</p>
-        {totalNotes > 0 && (
-          <p className="mt-1 text-xs text-muted-foreground">{totalNotes} notes olfactives trouvees</p>
-        )}
-      </div>
-
+    <>
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label>Prix (&euro;)</Label>
           <Input
             type="number"
             inputMode="decimal"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
+            value={value.price ?? ""}
+            onChange={(e) => onChange({ ...value, price: e.target.value ? Number(e.target.value) : null })}
             placeholder="90"
           />
         </div>
@@ -346,8 +360,8 @@ function ConfirmForm({
           <Input
             type="number"
             inputMode="numeric"
-            value={volumeMl}
-            onChange={(e) => setVolumeMl(e.target.value)}
+            value={value.volumeMl}
+            onChange={(e) => onChange({ ...value, volumeMl: Number(e.target.value) || 100 })}
           />
         </div>
       </div>
@@ -355,7 +369,10 @@ function ConfirmForm({
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
           <Label>Concentration</Label>
-          <Select value={concentration} onValueChange={(v) => setConcentration(v ?? "none")}>
+          <Select
+            value={value.concentration ?? "none"}
+            onValueChange={(v) => onChange({ ...value, concentration: v === "none" ? null : (v as MetaValues["concentration"]) })}
+          >
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Non renseigne" />
             </SelectTrigger>
@@ -371,7 +388,7 @@ function ConfirmForm({
         </div>
         <div className="space-y-1.5">
           <Label>Genre</Label>
-          <Select value={gender} onValueChange={(v) => setGender(v as ConfirmValues["gender"])}>
+          <Select value={value.gender} onValueChange={(v) => onChange({ ...value, gender: v as MetaValues["gender"] })}>
             <SelectTrigger className="w-full">
               <SelectValue />
             </SelectTrigger>
@@ -390,11 +407,12 @@ function ConfirmForm({
           {TAG_OPTIONS.map((tag) => (
             <label key={tag.value} className="flex items-center gap-1.5 text-sm">
               <Checkbox
-                checked={tags.includes(tag.value)}
+                checked={value.tags.includes(tag.value)}
                 onCheckedChange={(checked) =>
-                  setTags((prev) =>
-                    checked ? [...prev, tag.value] : prev.filter((t) => t !== tag.value)
-                  )
+                  onChange({
+                    ...value,
+                    tags: checked ? [...value.tags, tag.value] : value.tags.filter((t) => t !== tag.value),
+                  })
                 }
               />
               {tag.label}
@@ -402,6 +420,146 @@ function ConfirmForm({
           ))}
         </div>
       </div>
+    </>
+  );
+}
+
+function ConfirmForm({
+  draft,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  draft: ScrapedPerfume;
+  pending: boolean;
+  onCancel: () => void;
+  onConfirm: (values: MetaValues) => void;
+}) {
+  const [meta, setMeta] = useState<MetaValues>({
+    price: null,
+    volumeMl: 100,
+    concentration: null,
+    gender: draft.gender,
+    tags: [],
+  });
+
+  const totalNotes = useMemo(
+    () => draft.notes.top.length + draft.notes.heart.length + draft.notes.base.length,
+    [draft]
+  );
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <p className="font-medium">{draft.name}</p>
+        <p className="text-sm text-muted-foreground">{draft.brand}</p>
+        {totalNotes > 0 && (
+          <p className="mt-1 text-xs text-muted-foreground">{totalNotes} notes olfactives trouvees</p>
+        )}
+      </div>
+
+      <MetaFields value={meta} onChange={setMeta} />
+
+      <div className="mt-2 flex gap-2">
+        <Button variant="outline" className="flex-1" onClick={onCancel} disabled={pending}>
+          Retour
+        </Button>
+        <Button className="flex-1" disabled={pending} onClick={() => onConfirm(meta)}>
+          {pending ? "Ajout..." : "Ajouter"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function parseNotesList(value: string): string[] {
+  return value
+    .split(",")
+    .map((n) => n.trim())
+    .filter(Boolean);
+}
+
+function ManualForm({
+  initialName,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  initialName: string;
+  pending: boolean;
+  onCancel: () => void;
+  onConfirm: (input: ManualPerfumeInput) => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [name, setName] = useState(initialName);
+  const [brand, setBrand] = useState("");
+  const [imagePublicId, setImagePublicId] = useState<string | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [topNotes, setTopNotes] = useState("");
+  const [heartNotes, setHeartNotes] = useState("");
+  const [baseNotes, setBaseNotes] = useState("");
+  const [meta, setMeta] = useState<MetaValues>({
+    price: null,
+    volumeMl: 100,
+    concentration: null,
+    gender: "unisexe",
+    tags: [],
+  });
+
+  async function handleFile(file: File | undefined) {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const publicId = await uploadPerfumeImageAction(file);
+      setImagePublicId(publicId);
+      setImagePreview(URL.createObjectURL(file));
+    } catch {
+      toast.error("Impossible d'uploader l'image");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  const canSubmit = name.trim().length > 0 && brand.trim().length > 0 && !uploading;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => fileRef.current?.click()}
+          className="relative flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-dashed border-border bg-muted text-muted-foreground"
+        >
+          {imagePreview ? (
+            // eslint-disable-next-line @next/next/no-img-element -- preview local avant upload, pas une image distante a optimiser
+            <img src={imagePreview} alt="" className="size-full object-cover" />
+          ) : uploading ? (
+            <Loader2 className="size-5 animate-spin" />
+          ) : (
+            <Upload className="size-5" />
+          )}
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => handleFile(e.target.files?.[0])}
+        />
+        <div className="flex-1 space-y-2">
+          <Input placeholder="Nom du parfum" value={name} onChange={(e) => setName(e.target.value)} />
+          <Input placeholder="Marque" value={brand} onChange={(e) => setBrand(e.target.value)} />
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label>Notes olfactives (separees par des virgules)</Label>
+        <Input placeholder="Notes de tete" value={topNotes} onChange={(e) => setTopNotes(e.target.value)} />
+        <Input placeholder="Notes de coeur" value={heartNotes} onChange={(e) => setHeartNotes(e.target.value)} />
+        <Input placeholder="Notes de fond" value={baseNotes} onChange={(e) => setBaseNotes(e.target.value)} />
+      </div>
+
+      <MetaFields value={meta} onChange={setMeta} />
 
       <div className="mt-2 flex gap-2">
         <Button variant="outline" className="flex-1" onClick={onCancel} disabled={pending}>
@@ -409,14 +567,18 @@ function ConfirmForm({
         </Button>
         <Button
           className="flex-1"
-          disabled={pending}
+          disabled={pending || !canSubmit}
           onClick={() =>
             onConfirm({
-              price: price ? Number(price) : null,
-              volumeMl: Number(volumeMl) || 100,
-              concentration: concentration === "none" ? null : (concentration as ConfirmValues["concentration"]),
-              gender,
-              tags,
+              name,
+              brand,
+              imagePublicId,
+              ...meta,
+              notes: {
+                top: parseNotesList(topNotes),
+                heart: parseNotesList(heartNotes),
+                base: parseNotesList(baseNotes),
+              },
             })
           }
         >

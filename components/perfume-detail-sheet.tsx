@@ -50,7 +50,7 @@ export function PerfumeDetailSheet({
 }) {
   return (
     <Sheet open={perfume !== null} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="h-[80vh] overflow-y-auto rounded-t-2xl">
+      <SheetContent side="bottom" className="flex h-[80vh] flex-col overflow-hidden rounded-t-2xl">
         {perfume && context && <DetailBody perfume={perfume} context={context} onClose={() => onOpenChange(false)} />}
       </SheetContent>
     </Sheet>
@@ -98,10 +98,12 @@ function DetailBody({
     });
   }
 
+  const noteChanged = context.kind === "collection" && note !== (context.personalNote ?? "");
+
   return (
     <>
       <SheetHeader className="items-center text-center">
-        <div className="relative mb-2 h-48 w-36 overflow-hidden rounded-lg bg-muted">
+        <div className="relative mb-2 h-40 w-32 overflow-hidden rounded-lg bg-muted">
           {perfume.imageUrl ? (
             <Image src={perfume.imageUrl} alt={perfume.name} fill sizes="200px" className="object-cover" />
           ) : (
@@ -114,47 +116,53 @@ function DetailBody({
         <p className="text-base text-muted-foreground">{perfume.brand}</p>
       </SheetHeader>
 
-      <div className="flex flex-wrap items-center justify-center gap-3 px-4 text-sm text-muted-foreground">
-        {perfume.price != null && <span>{perfume.price}&nbsp;&euro;</span>}
-        <span>{perfume.volumeMl}&nbsp;mL</span>
-        {perfume.concentration && <span className="uppercase">{perfume.concentration}</span>}
-        <span className="capitalize">{perfume.gender}</span>
+      <div className="flex-1 space-y-4 overflow-y-auto px-4">
+        <div className="flex flex-wrap items-center justify-center gap-3 text-sm text-muted-foreground">
+          {perfume.price != null && <span>{perfume.price}&nbsp;&euro;</span>}
+          <span>{perfume.volumeMl}&nbsp;mL</span>
+          {perfume.concentration && <span className="uppercase">{perfume.concentration}</span>}
+          <span className="capitalize">{perfume.gender}</span>
+        </div>
+
+        {perfume.tags.length > 0 && (
+          <div className="flex flex-wrap justify-center gap-3">
+            {perfume.tags.map((tag) => {
+              const Icon = TAG_ICON[tag];
+              return (
+                <span key={tag} className="flex items-center gap-1 text-xs text-muted-foreground">
+                  {Icon && <Icon className="size-3.5" />}
+                  {TAG_LABEL[tag] ?? tag}
+                </span>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <NotesRow label="Tete" notes={perfume.notes.top} />
+          <NotesRow label="Coeur" notes={perfume.notes.heart} />
+          <NotesRow label="Fond" notes={perfume.notes.base} />
+        </div>
+
+        {context.kind === "collection" && (
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground">Note personnelle</label>
+            <Textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Ton avis sur ce parfum..."
+              rows={3}
+            />
+            {noteChanged && (
+              <Button size="sm" onClick={handleSaveNote} disabled={pending}>
+                Enregistrer
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
-      {perfume.tags.length > 0 && (
-        <div className="flex flex-wrap justify-center gap-3 px-4">
-          {perfume.tags.map((tag) => {
-            const Icon = TAG_ICON[tag];
-            return (
-              <span key={tag} className="flex items-center gap-1 text-xs text-muted-foreground">
-                {Icon && <Icon className="size-3.5" />}
-                {TAG_LABEL[tag] ?? tag}
-              </span>
-            );
-          })}
-        </div>
-      )}
-
-      <div className="space-y-4 px-4">
-        <NotesRow label="Tete" notes={perfume.notes.top} />
-        <NotesRow label="Coeur" notes={perfume.notes.heart} />
-        <NotesRow label="Fond" notes={perfume.notes.base} />
-      </div>
-
-      {context.kind === "collection" && (
-        <div className="space-y-2 px-4">
-          <label className="text-xs font-medium text-muted-foreground">Note personnelle</label>
-          <Textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            onBlur={handleSaveNote}
-            placeholder="Ton avis sur ce parfum..."
-            rows={3}
-          />
-        </div>
-      )}
-
-      <div className="mt-auto flex gap-2 px-4 pb-4">
+      <div className="flex shrink-0 gap-2 border-t border-border px-4 py-4">
         {context.kind === "wishlist" && (
           <Button className="flex-1" onClick={handleBought} disabled={pending}>
             <ShoppingBag /> Je l&apos;ai achete

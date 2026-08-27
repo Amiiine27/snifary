@@ -5,8 +5,12 @@ import { db } from "@/db";
 import { perfumes, notes, perfumeNotes, perfumeTags } from "@/db/schema";
 import { requireUser } from "@/lib/session";
 import { searchFragrantica, scrapeFragranticaPerfume, type ScrapedPerfume } from "@/lib/fragrantica";
-import { uploadImageFromUrl } from "@/lib/cloudinary";
+import { uploadImageFromUrl, uploadImageFromBuffer } from "@/lib/cloudinary";
 import { findPerfumesByName, findPerfumeByFragranticaUrl } from "@/lib/perfumes";
+
+type Gender = "homme" | "femme" | "unisexe";
+type Concentration = "edt" | "edp" | "parfum" | "extrait" | "cologne" | null;
+type Tag = "printemps" | "ete" | "automne" | "hiver" | "jour" | "nuit";
 
 // Etape 1a : recherche locale (cache Turso), quasi instantanee. Separee de la
 // recherche Fragrantica pour que l'utilisateur voie ces resultats tout de
@@ -56,9 +60,9 @@ export type SavePerfumeInput = {
   draft: ScrapedPerfume;
   price: number | null;
   volumeMl: number;
-  concentration: "edt" | "edp" | "parfum" | "extrait" | "cologne" | null;
-  gender: "homme" | "femme" | "unisexe";
-  tags: ("printemps" | "ete" | "automne" | "hiver" | "jour" | "nuit")[];
+  concentration: Concentration;
+  gender: Gender;
+  tags: Tag[];
 };
 
 // Etape 3 : l'utilisateur valide le brouillon (potentiellement corrige) ->
@@ -73,13 +77,79 @@ export async function savePerfumeAction(input: SavePerfumeInput): Promise<number
     ? await uploadImageFromUrl(input.draft.imageUrl, "perfumes")
     : null;
 
+  return insertPerfumeRow({
+    name: input.draft.name,
+    brand: input.draft.brand,
+    imagePublicId,
+    fragranticaUrl: input.draft.fragranticaUrl,
+    price: input.price,
+    volumeMl: input.volumeMl,
+    concentration: input.concentration,
+    gender: input.gender,
+    tags: input.tags,
+    notes: input.draft.notes,
+  });
+}
+
+export type ManualPerfumeInput = {
+  name: string;
+  brand: string;
+  imagePublicId: string | null;
+  price: number | null;
+  volumeMl: number;
+  concentration: Concentration;
+  gender: Gender;
+  tags: Tag[];
+  notes: { top: string[]; heart: string[]; base: string[] };
+};
+
+// Parfum introuvable sur Fragrantica (ou recherche indisponible) : l'utilisateur
+// saisit tout lui-meme. Meme chemin d'ecriture que le scraping, juste sans
+// fragranticaUrl et avec une image uploadee directement (uploadPerfumeImageAction).
+export async function createManualPerfumeAction(input: ManualPerfumeInput): Promise<number> {
+  await requireUser();
+  if (!input.name.trim() || !input.brand.trim()) throw new Error("Nom et marque requis");
+
+  return insertPerfumeRow({
+    name: input.name.trim(),
+    brand: input.brand.trim(),
+    imagePublicId: input.imagePublicId,
+    fragranticaUrl: null,
+    price: input.price,
+    volumeMl: input.volumeMl,
+    concentration: input.concentration,
+    gender: input.gender,
+    tags: input.tags,
+    notes: input.notes,
+  });
+}
+
+export async function uploadPerfumeImageAction(file: File): Promise<string> {
+  await requireUser();
+  if (!file.type.startsWith("image/")) throw new Error("Le fichier doit etre une image");
+  const buffer = Buffer.from(await file.arrayBuffer());
+  return uploadImageFromBuffer(buffer, "perfumes");
+}
+
+async function insertPerfumeRow(input: {
+  name: string;
+  brand: string;
+  imagePublicId: string | null;
+  fragranticaUrl: string | null;
+  price: number | null;
+  volumeMl: number;
+  concentration: Concentration;
+  gender: Gender;
+  tags: Tag[];
+  notes: { top: string[]; heart: string[]; base: string[] };
+}): Promise<number> {
   const [perfume] = await db
     .insert(perfumes)
     .values({
-      name: input.draft.name,
-      brand: input.draft.brand,
-      imagePublicId,
-      fragranticaUrl: input.draft.fragranticaUrl,
+      name: input.name,
+      brand: input.brand,
+      imagePublicId: input.imagePublicId,
+      fragranticaUrl: input.fragranticaUrl,
       price: input.price,
       volumeMl: input.volumeMl,
       concentration: input.concentration,
@@ -88,9 +158,9 @@ export async function savePerfumeAction(input: SavePerfumeInput): Promise<number
     .returning();
 
   await Promise.all([
-    insertNotes(perfume.id, "top", input.draft.notes.top),
-    insertNotes(perfume.id, "heart", input.draft.notes.heart),
-    insertNotes(perfume.id, "base", input.draft.notes.base),
+    insertNotes(perfume.id, "top", input.notes.top),
+    insertNotes(perfume.id, "heart", input.notes.heart),
+    insertNotes(perfume.id, "base", input.notes.base),
     input.tags.length > 0
       ? db.insert(perfumeTags).values(input.tags.map((tag) => ({ perfumeId: perfume.id, tag })))
       : Promise.resolve(),

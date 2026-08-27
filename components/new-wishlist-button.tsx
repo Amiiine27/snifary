@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import { createWishlistAction } from "@/lib/actions/wishlists";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -29,12 +29,12 @@ export function NewWishlistDialog({
   }
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="rounded-t-2xl">
-        <SheetHeader>
-          <SheetTitle>Nouvelle wishlist</SheetTitle>
-        </SheetHeader>
-        <div className="flex flex-col gap-3 px-4 pb-4">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="text-xl">Nouvelle wishlist</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-3">
           <Input
             autoFocus
             placeholder="Ex: A acheter"
@@ -46,8 +46,8 @@ export function NewWishlistDialog({
             Creer
           </Button>
         </div>
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
 

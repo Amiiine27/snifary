@@ -12,7 +12,7 @@ export function SectionPreview({
   href: string;
   perfumes: PerfumeDetails[];
 }) {
-  const preview = perfumes.slice(0, 6);
+  const preview = perfumes.slice(0, 4);
 
   return (
     <section className="flex flex-col gap-3">
@@ -29,19 +29,25 @@ export function SectionPreview({
           Rien ici pour l&apos;instant
         </Link>
       ) : (
-        <Link href={href} className="grid grid-cols-3 gap-3">
+        <Link href={href} className="grid grid-cols-2 gap-3">
           {preview.map((p) => (
             <div key={p.id} className="flex flex-col gap-1.5">
               <div className="relative aspect-square overflow-hidden rounded-xl bg-muted">
                 {p.imageUrl ? (
-                  <Image src={p.imageUrl} alt={p.name} fill sizes="150px" className="object-cover" />
+                  <Image src={p.imageUrl} alt={p.name} fill sizes="200px" className="object-cover" />
                 ) : (
                   <div className="flex size-full items-center justify-center text-muted-foreground">
                     <Droplet className="size-7" />
                   </div>
                 )}
               </div>
-              <p className="line-clamp-1 text-sm font-medium">{p.brand}</p>
+              <div>
+                <p className="line-clamp-1 text-sm font-medium">{p.name}</p>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span className="line-clamp-1">{p.brand}</span>
+                  {p.price != null && <span className="shrink-0">{p.price}&nbsp;&euro;</span>}
+                </div>
+              </div>
             </div>
           ))}
         </Link>
