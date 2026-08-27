@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Search, Loader2, AlertCircle } from "lucide-react";
+import { Search, Loader2, AlertCircle } from "lucide-react";
 import type { ScrapedPerfume } from "@/lib/fragrantica";
 import type { PerfumeCard as PerfumeCardData } from "@/lib/perfumes";
 import {
@@ -38,8 +38,15 @@ const TAG_OPTIONS = [
   { value: "nuit", label: "Nuit" },
 ] as const;
 
-export function AddPerfumeSheet({ target }: { target: Target }) {
-  const [open, setOpen] = useState(false);
+export function AddPerfumeDialog({
+  target,
+  open,
+  onOpenChange,
+}: {
+  target: Target;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const [query, setQuery] = useState("");
 
   const [localResults, setLocalResults] = useState<PerfumeCardData[] | null>(null);
@@ -124,7 +131,7 @@ export function AddPerfumeSheet({ target }: { target: Target }) {
       try {
         await addPerfumeIdToTarget(perfumeId);
         toast.success("Ajoute");
-        setOpen(false);
+        onOpenChange(false);
         reset();
       } catch {
         toast.error("Impossible d'ajouter ce parfum");
@@ -139,7 +146,7 @@ export function AddPerfumeSheet({ target }: { target: Target }) {
         if ("existingId" in result) {
           await addPerfumeIdToTarget(result.existingId);
           toast.success("Ajoute");
-          setOpen(false);
+          onOpenChange(false);
           reset();
         } else {
           setDraft(result.draft);
@@ -159,28 +166,19 @@ export function AddPerfumeSheet({ target }: { target: Target }) {
     !remoteError;
 
   return (
-    <>
-      <Button
-        className="fixed bottom-24 right-4 z-30 size-16 rounded-full shadow-lg [&_svg:not([class*='size-'])]:size-7"
-        onClick={() => setOpen(true)}
-        aria-label="Ajouter un parfum"
-      >
-        <Plus />
-      </Button>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        onOpenChange(v);
+        if (!v) reset();
+      }}
+    >
+      <DialogContent className="flex max-h-[85vh] w-[calc(100%-2rem)] max-w-md flex-col overflow-hidden sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-xl">{draft ? "Confirme les infos" : "Ajouter un parfum"}</DialogTitle>
+        </DialogHeader>
 
-      <Dialog
-        open={open}
-        onOpenChange={(v) => {
-          setOpen(v);
-          if (!v) reset();
-        }}
-      >
-        <DialogContent className="flex max-h-[85vh] w-[calc(100%-2rem)] max-w-md flex-col overflow-hidden sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-xl">{draft ? "Confirme les infos" : "Ajouter un parfum"}</DialogTitle>
-          </DialogHeader>
-
-          {!draft ? (
+        {!draft ? (
             <div className="flex flex-col gap-4 overflow-y-auto">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -245,7 +243,7 @@ export function AddPerfumeSheet({ target }: { target: Target }) {
                       const perfumeId = await savePerfumeAction({ draft, ...values });
                       await addPerfumeIdToTarget(perfumeId);
                       toast.success("Parfum ajoute");
-                      setOpen(false);
+                      onOpenChange(false);
                       reset();
                     } catch {
                       toast.error("Impossible d'enregistrer ce parfum");
@@ -255,9 +253,8 @@ export function AddPerfumeSheet({ target }: { target: Target }) {
               />
             </div>
           )}
-        </DialogContent>
-      </Dialog>
-    </>
+      </DialogContent>
+    </Dialog>
   );
 }
 

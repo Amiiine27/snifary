@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight, Grid2x2, List } from "lucide-react";
 import type { PerfumeDetails } from "@/lib/perfumes";
 import { PerfumeCard } from "@/components/perfume-card";
 import { PerfumeDetailSheet } from "@/components/perfume-detail-sheet";
-import { AddPerfumeSheet } from "@/components/add-perfume-sheet";
+import { AddFab } from "@/components/add-fab";
 import { FiltersSheet, EMPTY_FILTERS, type LibraryFilters } from "@/components/filters-sheet";
 import { cn } from "@/lib/utils";
 
@@ -42,7 +42,7 @@ export function LibrarySectionView({
   );
 
   return (
-    <div className="flex flex-col gap-5 px-4 pt-6">
+    <div className="flex flex-col gap-5 px-4 pt-20">
       <div className="flex items-center justify-between">
         <Link
           href={prevHref ?? "#"}
@@ -112,7 +112,7 @@ export function LibrarySectionView({
         onOpenChange={(open) => !open && setSelected(null)}
       />
 
-      <AddPerfumeSheet target={target} />
+      <AddFab target={target} />
     </div>
   );
 }
