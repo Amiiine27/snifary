@@ -2,6 +2,10 @@
 // Version la plus recente en premier.
 const CHANGELOG: { version: string; changes: string[] }[] = [
   {
+    version: "1.14",
+    changes: ["Ajoute une photo sur n'importe quel parfum depuis sa fiche (petit bouton camera sur l'image)"],
+  },
+  {
     version: "1.13",
     changes: ["Correctif : le scroll horizontal de \"Vous pourriez aimer\" ne fonctionnait pas sur mobile"],
   },

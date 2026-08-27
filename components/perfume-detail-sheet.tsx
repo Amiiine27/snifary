@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Droplet, ShoppingBag, Trash2, Pencil, Sun, Snowflake, Flower2, Leaf, SunMedium, MoonStar } from "lucide-react";
+import { Droplet, ShoppingBag, Trash2, Pencil, Camera, Loader2, Sun, Snowflake, Flower2, Leaf, SunMedium, MoonStar } from "lucide-react";
 import type { PerfumeDetails } from "@/lib/perfumes";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,8 @@ import {
   moveWishlistItemToCollectionAction,
   removeItemFromWishlistAction,
 } from "@/lib/actions/wishlists";
-import { updatePerfumeExtrasAction } from "@/lib/actions/perfumes";
+import { updatePerfumeExtrasAction, updatePerfumeImageAction, uploadPerfumeImageAction } from "@/lib/actions/perfumes";
+import { removeImageBackground } from "@/lib/remove-background";
 import { SimilarPerfumesSection } from "@/components/similar-perfumes-section";
 import type { ReferencePerfume } from "@/lib/perfumes";
 
@@ -93,7 +94,42 @@ function DetailBody({
   const [price, setPrice] = useState(perfume.price != null ? String(perfume.price) : "");
   const [description, setDescription] = useState(perfume.description ?? "");
   const [editOpen, setEditOpen] = useState(false);
+  const [imagePreview, setImagePreview] = useState(perfume.imageUrl);
+  const [imageUploading, setImageUploading] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const isManual = perfume.fragranticaUrl === null;
+
+  // Meme filet de rattrapage que prix/description : la plupart des fiches
+  // issues de la recherche/Decouvrir/pages marque n'ont pas d'image (le
+  // dataset n'en a pas, Wikipedia n'en trouve que pour une minorite), donc
+  // ajoutable ici pour n'importe quel parfum, pas seulement les fiches
+  // manuelles. Meme pipeline que ManualForm : suppression de fond
+  // best-effort (jamais bloquante) puis upload.
+  async function handleImageFile(file: File | undefined) {
+    if (!file) return;
+    setImageUploading(true);
+
+    let toUpload: Blob = file;
+    try {
+      toUpload = await removeImageBackground(file);
+    } catch (err) {
+      console.error("Suppression de fond echouee, image originale conservee :", err);
+      toast.info("Suppression du fond indisponible, image d'origine conservee");
+    }
+
+    try {
+      const uploadFile = new File([toUpload], "perfume.png", { type: toUpload.type || file.type });
+      const publicId = await uploadPerfumeImageAction(uploadFile);
+      await updatePerfumeImageAction(perfume.id, publicId);
+      setImagePreview(URL.createObjectURL(toUpload));
+      toast.success("Photo ajoutee");
+    } catch (err) {
+      console.error("Upload de l'image echoue :", err);
+      toast.error("Impossible d'uploader l'image");
+    } finally {
+      setImageUploading(false);
+    }
+  }
 
   function handleRemove() {
     startTransition(async () => {
@@ -150,14 +186,35 @@ function DetailBody({
     <>
       <SheetHeader className="items-center text-center">
         <div className="relative mb-2 h-40 w-32 shrink-0 overflow-hidden rounded-lg bg-muted">
-          {perfume.imageUrl ? (
-            // object-contain : l'image du parfum doit toujours etre visible en entier, jamais recadree.
-            <Image src={perfume.imageUrl} alt={perfume.name} fill sizes="200px" className="object-contain" />
+          {imagePreview ? (
+            imagePreview.startsWith("blob:") ? (
+              // eslint-disable-next-line @next/next/no-img-element -- preview local avant upload, pas une image distante a optimiser
+              <img src={imagePreview} alt={perfume.name} className="size-full object-contain" />
+            ) : (
+              // object-contain : l'image du parfum doit toujours etre visible en entier, jamais recadree.
+              <Image src={imagePreview} alt={perfume.name} fill sizes="200px" className="object-contain" />
+            )
           ) : (
             <div className="flex size-full items-center justify-center text-muted-foreground">
               <Droplet className="size-10" />
             </div>
           )}
+
+          <button
+            onClick={() => imageInputRef.current?.click()}
+            disabled={imageUploading}
+            aria-label={imagePreview ? "Changer la photo" : "Ajouter une photo"}
+            className="absolute bottom-1 right-1 flex size-7 items-center justify-center rounded-full bg-background text-foreground shadow-md disabled:opacity-50"
+          >
+            {imageUploading ? <Loader2 className="size-3.5 animate-spin" /> : <Camera className="size-3.5" />}
+          </button>
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => handleImageFile(e.target.files?.[0])}
+          />
         </div>
         <SheetTitle className="text-xl">{perfume.name}</SheetTitle>
         <Link

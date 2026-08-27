@@ -292,6 +292,19 @@ export async function updatePerfumeExtrasAction(
   revalidatePath("/collection");
 }
 
+// Meme logique que updatePerfumeExtrasAction, pour l'image : la plupart des
+// parfums issus de la recherche/Decouvrir/pages marque n'en ont pas
+// (fragrantica_reference n'en a jamais, Wikipedia n'en trouve que pour
+// ~10-15%, voir PROJECT.md), et n'importe quel utilisateur connecte peut
+// desormais en ajouter une depuis PerfumeDetailSheet -- pas seulement pour
+// les fiches manuelles comme via "Modifier".
+export async function updatePerfumeImageAction(perfumeId: number, imagePublicId: string): Promise<void> {
+  await requireUser();
+  await db.update(perfumes).set({ imagePublicId }).where(eq(perfumes.id, perfumeId));
+  revalidatePath("/");
+  revalidatePath("/collection");
+}
+
 export type ManualPerfumeInput = {
   name: string;
   brand: string;

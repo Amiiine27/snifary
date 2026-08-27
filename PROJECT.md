@@ -266,6 +266,17 @@ fiches manuelles comme le bouton "Modifier" complet) —
 quel utilisateur connecte peut corriger). Corrige a la fois les fiches deja
 en base et celles a venir.
 
+**Meme filet pour l'image** : petit bouton camera en overlay (coin bas-droit
+de la photo) dans `PerfumeDetailSheet`, disponible pour n'importe quel
+parfum (pas seulement manuel). Reutilise exactement le pipeline de
+`ManualForm` : `removeImageBackground()` (best-effort, jamais bloquant, cf
+section Flow d'ajout point 5) -> `uploadPerfumeImageAction` (upload direct,
+pas de scraping) -> nouvelle `updatePerfumeImageAction` (`UPDATE` simple,
+meme acceptation "n'importe qui peut corriger"). Preview locale en `<img>`
+brut (pas `next/image`) tant que c'est un blob non uploade — meme piege deja
+rencontre et contourne dans `ManualForm` : `next/image` ne sait pas
+optimiser une URL `blob:`.
+
 **"Vous pourriez aimer" (`getSimilarPerfumes`, `lib/perfumes.ts`), sur
 TOUTES les fiches parfum** (possedees via `PerfumeDetailSheet`, ou pas
 encore ajoutees via `ReferencePerfumeSheet`) : recommandations tirees de
