@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import type { ReferencePerfume } from "@/lib/perfumes";
 import { saveReferencePerfumeAction } from "@/lib/actions/perfumes";
+import { refineNewPerfumeImage } from "@/lib/refine-image";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,12 +76,15 @@ function Body({
   function handleSave() {
     startTransition(async () => {
       try {
-        await saveReferencePerfumeAction({
+        const saved = await saveReferencePerfumeAction({
           fragranticaUrl: perfume.fragranticaUrl,
           price: price.trim() ? Number(price) : null,
           toCollection,
           wishlistIds,
         });
+        // Fire-and-forget : ne bloque jamais l'enregistrement, l'image "pop"
+        // en fond transparent quelques secondes plus tard (lib/refine-image.ts).
+        if (saved.isNew && saved.imageUrl) void refineNewPerfumeImage(saved.perfumeId, saved.imageUrl);
         toast.success("Enregistre");
         onSaved();
       } catch {

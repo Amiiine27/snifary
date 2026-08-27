@@ -232,6 +232,19 @@ snapshot ne serait sinon plus jamais retrouvable en recherche, cassant
 justement le cas Prada Paradigme deja corrige cette session
 (`canAddManually`, voir plus bas).
 
+**Recherche "tous les mots, n'importe quel ordre"** (`searchWords()`,
+`lib/perfumes.ts`, factorisee et reutilisee par `findPerfumesByName`,
+`searchFragranticaReference` et `searchReferencePerfumes`) : chaque mot de
+la requete devient sa propre condition `LIKE` (nom OU marque), combinees en
+`AND` — plutot qu'un seul `LIKE '%requete entiere%'` qui exige une
+sous-chaine continue. **Piege reel corrige** : chercher "valentino born in
+roma intense" ne remontait pas "Valentino Uomo Born In Roma Intense" en
+sous-chaine continue, le mot "Uomo" cassant la continuite. Avec l'AND de
+mots, chaque terme (valentino/born/in/roma/intense) matche independamment
+n'importe ou dans nom+marque, ordre et mots en plus (comme "Uomo") n'ayant
+plus d'importance — comportement standard de n'importe quelle barre de
+recherche.
+
 **Images via le CDN Fragrantica (`fimgsImageUrl`/`findFimgsImage`,
 `lib/fragrantica.ts`) : source prioritaire, avant Open Beauty Facts et
 Wikipedia.** Fragrantica sert ses photos depuis un sous-domaine CDN separe,
@@ -355,6 +368,36 @@ meme acceptation "n'importe qui peut corriger"). Preview locale en `<img>`
 brut (pas `next/image`) tant que c'est un blob non uploade — meme piege deja
 rencontre et contourne dans `ManualForm` : `next/image` ne sait pas
 optimiser une URL `blob:`.
+
+**Suppression de fond automatique sur les images trouvees (`lib/refine-image.ts`,
+`refineNewPerfumeImage`)** : `savePerfumeAction`/`saveReferencePerfumeAction`
+renvoient desormais `{perfumeId, isNew, imageUrl}` (URL Cloudinary, pas juste
+le `public_id`) plutot qu'un simple id. Cote client
+(`add-perfume-dialog.tsx`, `reference-perfume-sheet.tsx`), si `isNew` et
+qu'une image a ete trouvee, `refineNewPerfumeImage` est appelee en
+**fire-and-forget** (jamais `await`, ne bloque jamais le toast "Ajoute") :
+retelecharge l'image depuis Cloudinary, la repasse dans le meme pipeline
+WASM que `ManualForm` (`removeImageBackground` -> `uploadPerfumeImageAction`
+-> `updatePerfumeImageAction`), et l'image "pop" en fond transparent
+quelques secondes plus tard. **Pourquoi apres coup et pas directement dans
+`findImageAndDescription`** : `removeImageBackground` est 100%
+navigateur/WASM (aucun equivalent Node cote serveur, voir
+`lib/remove-background.ts`), et les images trouvees automatiquement
+(fimgs.net, Open Beauty Facts, Wikipedia) ne peuvent pas etre retelechargees
+cote client pour y etre appliquees **avant** l'upload — `fimgs.net` ne sert
+aucun header CORS (verifie : ni `Access-Control-Allow-Origin` de base, ni
+meme avec un header `Origin` explicite), la lecture du blob serait bloquee
+par le navigateur. Cloudinary, lui, sert systematiquement
+`Access-Control-Allow-Origin: *` (verifie) : la seule fenetre ou une image
+tierce redevient exploitable cote client, c'est **apres** son premier upload
+sur Cloudinary — d'ou le rattrapage en 2 temps plutot qu'en un seul.
+Uniquement declenche pour un tout nouveau parfum (`isNew`), jamais quand
+`resolveAndSaveReferencePerfume`/`savePerfumeAction` retombent sur un
+`perfumes` deja existant (l'image a deja ete traitee, ou peut deja etre
+corrigee a la main via le bouton camera ci-dessus). Meme reflexe
+best-effort que le reste du pipeline images : un echec (`catch` +
+`console.error`) laisse simplement l'image d'origine en place, jamais
+d'erreur remontee a l'utilisateur.
 
 **"Vous pourriez aimer" (`getSimilarPerfumes`, `lib/perfumes.ts`), sur
 TOUTES les fiches parfum** (possedees via `PerfumeDetailSheet`, ou pas

@@ -16,6 +16,7 @@ import {
 import { addToCollectionAction } from "@/lib/actions/collection";
 import { addItemToWishlistAction } from "@/lib/actions/wishlists";
 import { removeImageBackground } from "@/lib/remove-background";
+import { refineNewPerfumeImage } from "@/lib/refine-image";
 import { guessConcentration } from "@/lib/concentration";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -169,17 +170,23 @@ export function AddPerfumeDialog({
     startTransition(async () => {
       try {
         const result = await resolvePerfumeAction(url);
-        const perfumeId =
-          "existingId" in result
-            ? result.existingId
-            : await savePerfumeAction({
-                draft: result.draft,
-                price: null,
-                volumeMl: 100,
-                concentration: guessConcentration(result.draft.name),
-                gender: result.draft.gender,
-                tags: [],
-              });
+        let perfumeId: number;
+        if ("existingId" in result) {
+          perfumeId = result.existingId;
+        } else {
+          const saved = await savePerfumeAction({
+            draft: result.draft,
+            price: null,
+            volumeMl: 100,
+            concentration: guessConcentration(result.draft.name),
+            gender: result.draft.gender,
+            tags: [],
+          });
+          perfumeId = saved.perfumeId;
+          // Fire-and-forget : ne bloque jamais l'ajout, l'image "pop" en fond
+          // transparent quelques secondes plus tard (voir lib/refine-image.ts).
+          if (saved.isNew && saved.imageUrl) void refineNewPerfumeImage(saved.perfumeId, saved.imageUrl);
+        }
         await addPerfumeIdToTarget(perfumeId);
         toast.success("Ajoute");
         onOpenChange(false);

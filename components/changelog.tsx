@@ -2,6 +2,16 @@
 // Version la plus recente en premier.
 const CHANGELOG: { version: string; changes: string[] }[] = [
   {
+    version: "1.24",
+    changes: [
+      "Fond retire automatiquement sur les photos trouvees a l'ajout (Fragrantica, Open Beauty Facts, Wikipedia)",
+    ],
+  },
+  {
+    version: "1.23",
+    changes: ["Recherche plus souple : l'ordre des mots et les mots manquants (ex. \"Uomo\") ne bloquent plus les resultats"],
+  },
+  {
     version: "1.22",
     changes: [
       "Photo ajoutee retroactivement aux parfums deja enregistres qui n'en avaient pas",

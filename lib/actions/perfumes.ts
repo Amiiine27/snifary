@@ -8,7 +8,7 @@ import { guessConcentration } from "@/lib/concentration";
 import { splitNotesList } from "@/lib/notes";
 import { requireUser } from "@/lib/session";
 import { findFimgsImage, type ScrapedPerfume } from "@/lib/fragrantica";
-import { uploadImageFromUrl, uploadImageFromBuffer } from "@/lib/cloudinary";
+import { uploadImageFromUrl, uploadImageFromBuffer, cloudinaryUrl } from "@/lib/cloudinary";
 import { findWikipediaPerfumeInfo } from "@/lib/wikipedia";
 import { findOpenBeautyFactsImage } from "@/lib/openbeautyfacts";
 import {
@@ -165,13 +165,20 @@ async function findImageAndDescription(
   return { imageUrl: fimgsImage ?? obfImage ?? wiki.image, description: wiki.description };
 }
 
+// Resultat d'un enregistrement : `imageUrl` (URL Cloudinary, pas juste le
+// public_id) permet au client de retelecharger l'image pour lui appliquer la
+// suppression de fond (voir refineNewPerfumeImage, lib/refine-image.ts) --
+// necessaire uniquement pour une image tout juste creee (`isNew`), jamais
+// pour un parfum deja existant qu'on vient de relier a une nouvelle cible.
+export type SavedPerfume = { perfumeId: number; isNew: boolean; imageUrl: string | null };
+
 // Etape 3 : l'utilisateur valide le brouillon (potentiellement corrige) ->
 // seul moment ou on ecrit en base, comme acte dans roadmap.md section 5.
-export async function savePerfumeAction(input: SavePerfumeInput): Promise<number> {
+export async function savePerfumeAction(input: SavePerfumeInput): Promise<SavedPerfume> {
   await requireUser();
 
   const existing = await findPerfumeByFragranticaUrl(input.draft.fragranticaUrl);
-  if (existing) return existing.id;
+  if (existing) return { perfumeId: existing.id, isNew: false, imageUrl: cloudinaryUrl(existing.imagePublicId) };
 
   const { imageUrl, description } = await findImageAndDescription(
     input.draft.name,
@@ -182,7 +189,7 @@ export async function savePerfumeAction(input: SavePerfumeInput): Promise<number
 
   const imagePublicId = imageUrl ? await uploadImageFromUrl(imageUrl, "perfumes") : null;
 
-  return insertPerfumeRow({
+  const perfumeId = await insertPerfumeRow({
     name: input.draft.name,
     brand: input.draft.brand,
     imagePublicId,
@@ -196,6 +203,8 @@ export async function savePerfumeAction(input: SavePerfumeInput): Promise<number
     tags: input.tags,
     notes: input.draft.notes,
   });
+
+  return { perfumeId, isNew: true, imageUrl: cloudinaryUrl(imagePublicId) };
 }
 
 // Resout (dataset local, jamais de scraping ici) puis ecrit un parfum issu
@@ -206,13 +215,13 @@ export async function savePerfumeAction(input: SavePerfumeInput): Promise<number
 // directement. `price` est le seul champ saisi a la main dans ce meme ecran
 // (la description n'est jamais demandee a l'utilisateur, voir
 // findImageAndDescription -- trouvee automatiquement ou laissee vide).
-async function resolveAndSaveReferencePerfume(fragranticaUrl: string, price: number | null): Promise<number> {
+async function resolveAndSaveReferencePerfume(fragranticaUrl: string, price: number | null): Promise<SavedPerfume> {
   const existing = await findPerfumeByFragranticaUrl(fragranticaUrl);
   if (existing) {
     if (price != null) {
       await db.update(perfumes).set({ price }).where(eq(perfumes.id, existing.id));
     }
-    return existing.id;
+    return { perfumeId: existing.id, isNew: false, imageUrl: cloudinaryUrl(existing.imagePublicId) };
   }
 
   const reference = await findReferenceByUrl(fragranticaUrl);
@@ -226,7 +235,7 @@ async function resolveAndSaveReferencePerfume(fragranticaUrl: string, price: num
   );
   const imagePublicId = imageUrl ? await uploadImageFromUrl(imageUrl, "perfumes") : null;
 
-  return insertPerfumeRow({
+  const perfumeId = await insertPerfumeRow({
     name: reference.name,
     brand: reference.brand,
     imagePublicId,
@@ -244,6 +253,8 @@ async function resolveAndSaveReferencePerfume(fragranticaUrl: string, price: num
       base: splitNotesList(reference.notesBase),
     },
   });
+
+  return { perfumeId, isNew: true, imageUrl: cloudinaryUrl(imagePublicId) };
 }
 
 export type SaveReferencePerfumeInput = {
@@ -258,23 +269,24 @@ export type SaveReferencePerfumeInput = {
 // la fiche complete du parfum d'abord (ReferencePerfumeSheet), puis choisit
 // librement collection et/ou une ou plusieurs wishlists avant d'ecrire quoi
 // que ce soit.
-export async function saveReferencePerfumeAction(input: SaveReferencePerfumeInput): Promise<void> {
+export async function saveReferencePerfumeAction(input: SaveReferencePerfumeInput): Promise<SavedPerfume> {
   const user = await requireUser();
   if (!input.toCollection && input.wishlistIds.length === 0) {
     throw new Error("Choisis au moins une destination");
   }
 
-  const perfumeId = await resolveAndSaveReferencePerfume(input.fragranticaUrl, input.price);
+  const result = await resolveAndSaveReferencePerfume(input.fragranticaUrl, input.price);
 
   if (input.toCollection) {
-    await db.insert(collectionItems).values({ userId: user.id, perfumeId }).onConflictDoNothing();
+    await db.insert(collectionItems).values({ userId: user.id, perfumeId: result.perfumeId }).onConflictDoNothing();
   }
   for (const wishlistId of input.wishlistIds) {
-    await addItemToWishlistAction(wishlistId, perfumeId);
+    await addItemToWishlistAction(wishlistId, result.perfumeId);
   }
 
   revalidatePath("/");
   revalidatePath("/collection");
+  return result;
 }
 
 // Corrige apres coup un prix/une description manquants (ou faux) sur

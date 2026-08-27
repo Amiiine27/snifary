@@ -36,6 +36,15 @@ export type PerfumeDetails = PerfumeCard & {
   notes: { top: string[]; heart: string[]; base: string[] };
 };
 
+// Recherche "tous les mots, n'importe quel ordre" plutot qu'une seule
+// sous-chaine continue -- comme sur n'importe quelle barre de recherche.
+// Corrige un cas reel : "valentino born in roma intense" ne remontait pas
+// "Valentino Born In Roma Uomo Intense" en LIKE simple sur la requete
+// entiere, le mot "Uomo" cassant la sous-chaine continue attendue.
+function searchWords(query: string): string[] {
+  return query.trim().split(/\s+/).filter(Boolean);
+}
+
 function toCard(p: typeof perfumes.$inferSelect): PerfumeCard {
   return {
     id: p.id,
@@ -90,11 +99,11 @@ export async function getPerfumeDetails(perfumeId: number): Promise<PerfumeDetai
 }
 
 export async function findPerfumesByName(query: string): Promise<PerfumeCard[]> {
-  const term = `%${query.trim()}%`;
+  const words = searchWords(query);
   const rows = await db
     .select()
     .from(perfumes)
-    .where(or(like(perfumes.name, term), like(perfumes.brand, term)))
+    .where(and(...words.map((w) => or(like(perfumes.name, `%${w}%`), like(perfumes.brand, `%${w}%`)))))
     .limit(10);
   return rows.map(toCard);
 }
@@ -111,11 +120,13 @@ export async function findPerfumeByFragranticaUrl(url: string) {
 export type ReferenceCandidate = { url: string; name: string; brand: string; imageUrl: string | null };
 
 export async function searchFragranticaReference(query: string): Promise<ReferenceCandidate[]> {
-  const term = `%${query.trim()}%`;
+  const words = searchWords(query);
   const rows = await db
     .select()
     .from(fragranticaReference)
-    .where(or(like(fragranticaReference.name, term), like(fragranticaReference.brand, term)))
+    .where(
+      and(...words.map((w) => or(like(fragranticaReference.name, `%${w}%`), like(fragranticaReference.brand, `%${w}%`))))
+    )
     .limit(15);
   return rows.map((r) => ({
     url: r.fragranticaUrl,
@@ -217,11 +228,13 @@ export async function getBrandCatalog(brand: string): Promise<ReferencePerfume[]
 // meme logique que la recherche principale (searchFragranticaReference) ou
 // une recherche par nom/marque doit tout remonter, peu importe le genre.
 export async function searchReferencePerfumes(query: string, limit = 30): Promise<ReferencePerfume[]> {
-  const term = `%${query.trim()}%`;
+  const words = searchWords(query);
   const rows = await db
     .select()
     .from(fragranticaReference)
-    .where(or(like(fragranticaReference.name, term), like(fragranticaReference.brand, term)))
+    .where(
+      and(...words.map((w) => or(like(fragranticaReference.name, `%${w}%`), like(fragranticaReference.brand, `%${w}%`))))
+    )
     .orderBy(fragranticaReference.name)
     .limit(limit);
   return rows.map(toReferencePerfume);
