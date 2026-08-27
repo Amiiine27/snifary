@@ -25,7 +25,11 @@ const FETCH_TIMEOUT_MS = 6000;
 
 function fetchWithTimeout(url: string | URL) {
   return fetch(url, {
-    headers: { "User-Agent": USER_AGENT },
+    headers: {
+      "User-Agent": USER_AGENT,
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+      "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+    },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
 }
@@ -100,11 +104,17 @@ export async function scrapeFragranticaPerfume(fragranticaUrl: string): Promise<
     name = name.slice(0, name.length - brand.length).trim();
   }
 
-  const gender: ScrapedPerfume["gender"] = genderText.includes("women") && genderText.includes("men")
+  // "for women" contient litteralement "men" (wo-MEN) : un simple double
+  // includes() classait donc TOUTE fiche femme en unisexe. Fragrantica
+  // n'emploie que 3 formulations ("for men", "for women", "for women and
+  // men"), la conjonction "and" est le seul signal fiable du cas mixte.
+  const hasWomen = genderText.includes("women");
+  const hasMen = /\bmen\b/.test(genderText);
+  const gender: ScrapedPerfume["gender"] = genderText.includes("and")
     ? "unisexe"
-    : genderText.includes("women")
+    : hasWomen
       ? "femme"
-      : genderText.includes("men")
+      : hasMen
         ? "homme"
         : "unisexe";
 
