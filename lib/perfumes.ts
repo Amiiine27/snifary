@@ -23,8 +23,10 @@ export type PerfumeCard = {
 };
 
 export type PerfumeDetails = PerfumeCard & {
+  imagePublicId: string | null;
   concentration: string | null;
   fragranticaUrl: string | null;
+  inspiredBy: string | null;
   tags: string[];
   notes: { top: string[]; heart: string[]; base: string[] };
 };
@@ -61,8 +63,10 @@ async function attachDetails(rows: (typeof perfumes.$inferSelect)[]): Promise<Pe
 
   return rows.map((p) => ({
     ...toCard(p),
+    imagePublicId: p.imagePublicId,
     concentration: p.concentration,
     fragranticaUrl: p.fragranticaUrl,
+    inspiredBy: p.inspiredBy,
     tags: tagRows.filter((t) => t.perfumeId === p.id).map((t) => t.tag),
     notes: {
       top: noteRows.filter((n) => n.perfumeId === p.id && n.type === "top").map((n) => n.name),

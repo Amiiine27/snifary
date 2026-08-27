@@ -284,7 +284,7 @@ export function AddPerfumeDialog({
         {view === "manual" && (
           <div className="flex-1 overflow-y-auto">
             <ManualForm
-              initialName={query}
+              initial={{ name: query }}
               pending={pending}
               onCancel={() => setView("search")}
               onConfirm={(input) => {
@@ -480,33 +480,49 @@ function parseNotesList(value: string): string[] {
     .filter(Boolean);
 }
 
-function ManualForm({
-  initialName,
+export type ManualFormInitial = {
+  name?: string;
+  brand?: string;
+  imagePublicId?: string | null;
+  imagePreviewUrl?: string | null;
+  inspiredBy?: string | null;
+  notes?: { top: string[]; heart: string[]; base: string[] };
+  meta?: MetaValues;
+};
+
+export function ManualForm({
+  initial,
+  submitLabel = "Ajouter",
   pending,
   onCancel,
   onConfirm,
 }: {
-  initialName: string;
+  initial?: ManualFormInitial;
+  submitLabel?: string;
   pending: boolean;
   onCancel: () => void;
   onConfirm: (input: ManualPerfumeInput) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const [name, setName] = useState(initialName);
-  const [brand, setBrand] = useState("");
-  const [imagePublicId, setImagePublicId] = useState<string | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [name, setName] = useState(initial?.name ?? "");
+  const [brand, setBrand] = useState(initial?.brand ?? "");
+  const [imagePublicId, setImagePublicId] = useState<string | null>(initial?.imagePublicId ?? null);
+  const [imagePreview, setImagePreview] = useState<string | null>(initial?.imagePreviewUrl ?? null);
   const [uploading, setUploading] = useState(false);
-  const [topNotes, setTopNotes] = useState("");
-  const [heartNotes, setHeartNotes] = useState("");
-  const [baseNotes, setBaseNotes] = useState("");
-  const [meta, setMeta] = useState<MetaValues>({
-    price: null,
-    volumeMl: 100,
-    concentration: null,
-    gender: "unisexe",
-    tags: [],
-  });
+  const [topNotes, setTopNotes] = useState(initial?.notes?.top.join(", ") ?? "");
+  const [heartNotes, setHeartNotes] = useState(initial?.notes?.heart.join(", ") ?? "");
+  const [baseNotes, setBaseNotes] = useState(initial?.notes?.base.join(", ") ?? "");
+  const [isClone, setIsClone] = useState(!!initial?.inspiredBy);
+  const [inspiredBy, setInspiredBy] = useState(initial?.inspiredBy ?? "");
+  const [meta, setMeta] = useState<MetaValues>(
+    initial?.meta ?? {
+      price: null,
+      volumeMl: 100,
+      concentration: null,
+      gender: "unisexe",
+      tags: [],
+    }
+  );
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
@@ -564,6 +580,20 @@ function ManualForm({
 
       <MetaFields value={meta} onChange={setMeta} />
 
+      <div className="space-y-1.5">
+        <label className="flex items-center gap-1.5 text-sm">
+          <Checkbox checked={isClone} onCheckedChange={(checked) => setIsClone(checked === true)} />
+          Clone
+        </label>
+        {isClone && (
+          <Input
+            placeholder="Inspire de quel parfum ?"
+            value={inspiredBy}
+            onChange={(e) => setInspiredBy(e.target.value)}
+          />
+        )}
+      </div>
+
       <div className="mt-2 flex gap-2">
         <Button variant="outline" className="flex-1" onClick={onCancel} disabled={pending}>
           Retour
@@ -576,6 +606,7 @@ function ManualForm({
               name,
               brand,
               imagePublicId,
+              inspiredBy: isClone ? inspiredBy : null,
               ...meta,
               notes: {
                 top: parseNotesList(topNotes),
@@ -585,7 +616,7 @@ function ManualForm({
             })
           }
         >
-          {pending ? "Ajout..." : "Ajouter"}
+          {pending ? "..." : submitLabel}
         </Button>
       </div>
     </div>

@@ -30,11 +30,11 @@ export function NewWishlistDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="flex min-h-[320px] flex-col">
         <DialogHeader>
           <DialogTitle className="text-xl">Nouvelle wishlist</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-1 flex-col justify-center gap-3">
           <Input
             autoFocus
             placeholder="Ex: A acheter"

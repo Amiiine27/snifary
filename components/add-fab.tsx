@@ -9,9 +9,35 @@ import { cn } from "@/lib/utils";
 
 type Target = { kind: "collection" } | { kind: "wishlist"; wishlistId: number };
 
-// FAB unique qui se deploie en 2 options : ajouter un parfum a la liste
-// courante, ou creer une toute nouvelle wishlist sans quitter la page.
+// Dans la collection, le "+" n'a qu'un seul sens possible (ajouter un
+// parfum) : bouton direct, pas de menu. Le choix "parfum vs nouvelle
+// wishlist" n'a de sens que depuis une wishlist.
 export function AddFab({ target }: { target: Target }) {
+  if (target.kind === "collection") {
+    return <SimpleAddFab target={target} />;
+  }
+  return <ExpandableAddFab target={target} />;
+}
+
+function SimpleAddFab({ target }: { target: Target }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button
+        className="fixed bottom-24 right-4 z-30 size-16 rounded-full shadow-lg [&_svg:not([class*='size-'])]:size-7"
+        onClick={() => setOpen(true)}
+        aria-label="Ajouter un parfum"
+      >
+        <Plus />
+      </Button>
+      <AddPerfumeDialog target={target} open={open} onOpenChange={setOpen} />
+    </>
+  );
+}
+
+// FAB qui se deploie en 2 options : ajouter un parfum a la wishlist
+// courante, ou creer une toute nouvelle wishlist sans quitter la page.
+function ExpandableAddFab({ target }: { target: Target }) {
   const [expanded, setExpanded] = useState(false);
   const [showAddPerfume, setShowAddPerfume] = useState(false);
   const [showNewWishlist, setShowNewWishlist] = useState(false);

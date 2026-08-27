@@ -22,6 +22,8 @@ export const perfumes = sqliteTable(
     brand: text("brand").notNull(),
     imagePublicId: text("image_public_id"), // Cloudinary public_id uniquement, jamais l'URL
     fragranticaUrl: text("fragranticaUrl"),
+    // Non-null = c'est un "clone"/dupe, precise de quel parfum original il s'inspire.
+    inspiredBy: text("inspired_by"),
     price: real("price"), // prix en euros, nullable (pas toujours connu)
     volumeMl: integer("volume_ml").notNull().default(100), // contenance, 100ml par defaut
     concentration: text("concentration", {

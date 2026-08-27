@@ -1,0 +1,1 @@
+ALTER TABLE `perfumes` ADD `inspired_by` text;

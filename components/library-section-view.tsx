@@ -47,23 +47,27 @@ export function LibrarySectionView({
     <div className="flex flex-col gap-5 px-4 pt-4">
       {aside && <div className="-mb-2 text-center text-sm text-muted-foreground">{aside}</div>}
 
-      <div className="flex items-center justify-between">
-        <Link
-          href={prevHref ?? "#"}
-          aria-disabled={!prevHref}
-          className={cn("p-1.5", !prevHref && "pointer-events-none opacity-30")}
-        >
-          <ChevronLeft className="size-6" />
-        </Link>
-        <h1 className="font-heading text-2xl">{title}</h1>
-        <Link
-          href={nextHref ?? "#"}
-          aria-disabled={!nextHref}
-          className={cn("p-1.5", !nextHref && "pointer-events-none opacity-30")}
-        >
-          <ChevronRight className="size-6" />
-        </Link>
-      </div>
+      {target.kind === "wishlist" ? (
+        <div className="flex items-center justify-between">
+          <Link
+            href={prevHref ?? "#"}
+            aria-disabled={!prevHref}
+            className={cn("p-1.5", !prevHref && "pointer-events-none opacity-30")}
+          >
+            <ChevronLeft className="size-6" />
+          </Link>
+          <h1 className="font-heading text-2xl">{title}</h1>
+          <Link
+            href={nextHref ?? "#"}
+            aria-disabled={!nextHref}
+            className={cn("p-1.5", !nextHref && "pointer-events-none opacity-30")}
+          >
+            <ChevronRight className="size-6" />
+          </Link>
+        </div>
+      ) : (
+        <h1 className="text-center font-heading text-2xl">{title}</h1>
+      )}
 
       <div className="flex items-center justify-between">
         <FiltersSheet filters={filters} onChange={setFilters} />

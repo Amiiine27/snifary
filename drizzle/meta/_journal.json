@@ -15,6 +15,13 @@
       "when": 1787794587319,
       "tag": "0001_moaning_omega_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787802670478,
+      "tag": "0002_lively_gorgon",
+      "breakpoints": true
     }
   ]
 }

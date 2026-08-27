@@ -3,11 +3,12 @@
 import { useState, useTransition } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
-import { Droplet, ShoppingBag, Trash2, Sun, Snowflake, Flower2, Leaf, SunMedium, MoonStar } from "lucide-react";
+import { Droplet, ShoppingBag, Trash2, Pencil, Sun, Snowflake, Flower2, Leaf, SunMedium, MoonStar } from "lucide-react";
 import type { PerfumeDetails } from "@/lib/perfumes";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { EditPerfumeDialog } from "@/components/edit-perfume-dialog";
 import {
   removeFromCollectionAction,
   updatePersonalNoteAction,
@@ -68,6 +69,8 @@ function DetailBody({
 }) {
   const [pending, startTransition] = useTransition();
   const [note, setNote] = useState(context.kind === "collection" ? context.personalNote ?? "" : "");
+  const [editOpen, setEditOpen] = useState(false);
+  const isManual = perfume.fragranticaUrl === null;
 
   function handleRemove() {
     startTransition(async () => {
@@ -125,6 +128,10 @@ function DetailBody({
           <span className="capitalize">{perfume.gender}</span>
         </div>
 
+        {perfume.inspiredBy && (
+          <p className="text-center text-xs text-muted-foreground">Clone inspire de {perfume.inspiredBy}</p>
+        )}
+
         {perfume.tags.length > 0 && (
           <div className="flex flex-wrap justify-center gap-3">
             {perfume.tags.map((tag) => {
@@ -169,10 +176,17 @@ function DetailBody({
             <ShoppingBag /> Je l&apos;ai achete
           </Button>
         )}
+        {isManual && (
+          <Button variant="outline" className={context.kind === "wishlist" ? "" : "flex-1"} onClick={() => setEditOpen(true)} disabled={pending}>
+            <Pencil /> {context.kind === "wishlist" ? null : "Modifier"}
+          </Button>
+        )}
         <Button variant="outline" onClick={handleRemove} disabled={pending}>
           <Trash2 />
         </Button>
       </div>
+
+      {isManual && <EditPerfumeDialog perfume={perfume} open={editOpen} onOpenChange={setEditOpen} />}
     </>
   );
 }

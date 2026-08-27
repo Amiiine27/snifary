@@ -1,6 +1,7 @@
 "use server";
 
 import { eq } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { perfumes, notes, perfumeNotes, perfumeTags } from "@/db/schema";
 import { requireUser } from "@/lib/session";
@@ -82,6 +83,7 @@ export async function savePerfumeAction(input: SavePerfumeInput): Promise<number
     brand: input.draft.brand,
     imagePublicId,
     fragranticaUrl: input.draft.fragranticaUrl,
+    inspiredBy: null,
     price: input.price,
     volumeMl: input.volumeMl,
     concentration: input.concentration,
@@ -95,6 +97,7 @@ export type ManualPerfumeInput = {
   name: string;
   brand: string;
   imagePublicId: string | null;
+  inspiredBy: string | null;
   price: number | null;
   volumeMl: number;
   concentration: Concentration;
@@ -115,6 +118,7 @@ export async function createManualPerfumeAction(input: ManualPerfumeInput): Prom
     brand: input.brand.trim(),
     imagePublicId: input.imagePublicId,
     fragranticaUrl: null,
+    inspiredBy: input.inspiredBy?.trim() || null,
     price: input.price,
     volumeMl: input.volumeMl,
     concentration: input.concentration,
@@ -122,6 +126,44 @@ export async function createManualPerfumeAction(input: ManualPerfumeInput): Prom
     tags: input.tags,
     notes: input.notes,
   });
+}
+
+// Edition d'un parfum saisi manuellement : remplace entierement ses notes/tags
+// (plus simple et plus sur qu'un diff) et met a jour la fiche partagee. Comme
+// `perfumes` est un catalogue commun sans notion de proprietaire, n'importe
+// quel utilisateur connecte peut corriger une fiche manuelle existante -
+// acceptable a l'echelle perso de ce projet (pas de colonne createdBy).
+export async function updateManualPerfumeAction(perfumeId: number, input: ManualPerfumeInput): Promise<void> {
+  await requireUser();
+  if (!input.name.trim() || !input.brand.trim()) throw new Error("Nom et marque requis");
+
+  await db
+    .update(perfumes)
+    .set({
+      name: input.name.trim(),
+      brand: input.brand.trim(),
+      imagePublicId: input.imagePublicId,
+      inspiredBy: input.inspiredBy?.trim() || null,
+      price: input.price,
+      volumeMl: input.volumeMl,
+      concentration: input.concentration,
+      gender: input.gender,
+    })
+    .where(eq(perfumes.id, perfumeId));
+
+  await db.delete(perfumeNotes).where(eq(perfumeNotes.perfumeId, perfumeId));
+  await db.delete(perfumeTags).where(eq(perfumeTags.perfumeId, perfumeId));
+
+  await Promise.all([
+    insertNotes(perfumeId, "top", input.notes.top),
+    insertNotes(perfumeId, "heart", input.notes.heart),
+    insertNotes(perfumeId, "base", input.notes.base),
+    input.tags.length > 0
+      ? db.insert(perfumeTags).values(input.tags.map((tag) => ({ perfumeId, tag })))
+      : Promise.resolve(),
+  ]);
+
+  revalidatePath("/", "layout");
 }
 
 export async function uploadPerfumeImageAction(file: File): Promise<string> {
@@ -136,6 +178,7 @@ async function insertPerfumeRow(input: {
   brand: string;
   imagePublicId: string | null;
   fragranticaUrl: string | null;
+  inspiredBy: string | null;
   price: number | null;
   volumeMl: number;
   concentration: Concentration;
@@ -150,6 +193,7 @@ async function insertPerfumeRow(input: {
       brand: input.brand,
       imagePublicId: input.imagePublicId,
       fragranticaUrl: input.fragranticaUrl,
+      inspiredBy: input.inspiredBy,
       price: input.price,
       volumeMl: input.volumeMl,
       concentration: input.concentration,
