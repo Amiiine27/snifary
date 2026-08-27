@@ -16,6 +16,7 @@ import {
 } from "@/lib/actions/perfumes";
 import { addToCollectionAction } from "@/lib/actions/collection";
 import { addItemToWishlistAction } from "@/lib/actions/wishlists";
+import { removeImageBackground } from "@/lib/remove-background";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -511,11 +512,13 @@ function ManualForm({
     if (!file) return;
     setUploading(true);
     try {
-      const publicId = await uploadPerfumeImageAction(file);
+      const cleaned = await removeImageBackground(file);
+      const cleanedFile = new File([cleaned], "perfume.png", { type: "image/png" });
+      const publicId = await uploadPerfumeImageAction(cleanedFile);
       setImagePublicId(publicId);
-      setImagePreview(URL.createObjectURL(file));
+      setImagePreview(URL.createObjectURL(cleaned));
     } catch {
-      toast.error("Impossible d'uploader l'image");
+      toast.error("Impossible de traiter l'image");
     } finally {
       setUploading(false);
     }
@@ -532,7 +535,7 @@ function ManualForm({
         >
           {imagePreview ? (
             // eslint-disable-next-line @next/next/no-img-element -- preview local avant upload, pas une image distante a optimiser
-            <img src={imagePreview} alt="" className="size-full object-cover" />
+            <img src={imagePreview} alt="" className="size-full object-contain p-1" />
           ) : uploading ? (
             <Loader2 className="size-5 animate-spin" />
           ) : (
