@@ -2,6 +2,10 @@
 // Version la plus recente en premier.
 const CHANGELOG: { version: string; changes: string[] }[] = [
   {
+    version: "1.21",
+    changes: ["Le bouton + de la collection propose a nouveau le choix parfum/nouvelle wishlist"],
+  },
+  {
     version: "1.20",
     changes: [
       "Vraies photos de flacon sur Decouvrir, les pages marque et \"Vous pourriez aimer\" (avant : icone generique)",

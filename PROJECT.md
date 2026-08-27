@@ -485,11 +485,12 @@ cache partage (le meme parfum, meme id, pour tout le monde), mais posseder ce
 parfum est toujours une ligne separee dans `collection_items`/`wishlist_items`
 liee au `userId` de qui a fait l'ajout.
 
-**Bouton "+" different selon le contexte** (`components/add-fab.tsx`) : dans
-la collection, un seul choix a du sens -> bouton simple qui ouvre direct
-`AddPerfumeDialog`. Dans une wishlist, le "+" se deploie en 2 options (ajouter
-un parfum / creer une nouvelle wishlist) car les deux actions sont legitimes
-depuis cet ecran.
+**Bouton "+" identique partout** (`components/add-fab.tsx`) : se deploie
+toujours en 2 options (ajouter un parfum / creer une nouvelle wishlist),
+collection comprise. Une premiere version limitait la collection a un
+bouton simple ouvrant direct `AddPerfumeDialog` (un seul choix jugé sensé a
+l'epoque) — revenu en arriere suite a un retour explicite, le menu a 2
+options est redevenu la version voulue partout.
 
 **Fleches precedent/suivant** de `LibrarySectionView` : entre deux wishlists,
 navigation libre dans les deux sens. Depuis la collection

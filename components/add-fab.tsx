@@ -9,43 +9,17 @@ import { cn } from "@/lib/utils";
 
 type Target = { kind: "collection" } | { kind: "wishlist"; wishlistId: number };
 
-// Dans la collection, le "+" n'a qu'un seul sens possible (ajouter un
-// parfum) : bouton direct, pas de menu. Le choix "parfum vs nouvelle
-// wishlist" n'a de sens que depuis une wishlist.
+// Le "+" se deploie toujours en 2 options (ajouter un parfum / creer une
+// nouvelle wishlist), collection comprise -- redemande explicitement apres
+// une premiere version qui limitait la collection a un bouton direct
+// (ajout de parfum uniquement, pas de menu).
 export function AddFab({ target }: { target: Target }) {
-  if (target.kind === "collection") {
-    return <SimpleAddFab target={target} />;
-  }
   return <ExpandableAddFab target={target} />;
 }
 
-function SimpleAddFab({ target }: { target: Target }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      {/* Bande fixe pleine largeur contenant une colonne bornee a la meme
-          largeur que le shell (voir app/(app)/layout.tsx) : sur tablette/PC,
-          le shell s'elargit mais reste centre, donc le FAB doit suivre son
-          bord droit plutot que celui du viewport (`right-4` seul collerait
-          le bouton loin du contenu sur un grand ecran). */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 flex justify-center">
-        <div className="flex w-full max-w-md justify-end px-4 sm:max-w-2xl lg:max-w-4xl">
-          <Button
-            className="pointer-events-auto size-16 rounded-full shadow-lg [&_svg:not([class*='size-'])]:size-7"
-            onClick={() => setOpen(true)}
-            aria-label="Ajouter un parfum"
-          >
-            <Plus />
-          </Button>
-        </div>
-      </div>
-      <AddPerfumeDialog target={target} open={open} onOpenChange={setOpen} />
-    </>
-  );
-}
-
-// FAB qui se deploie en 2 options : ajouter un parfum a la wishlist
-// courante, ou creer une toute nouvelle wishlist sans quitter la page.
+// FAB qui se deploie en 2 options : ajouter un parfum a la section courante
+// (collection ou wishlist), ou creer une toute nouvelle wishlist sans
+// quitter la page.
 function ExpandableAddFab({ target }: { target: Target }) {
   const [expanded, setExpanded] = useState(false);
   const [showAddPerfume, setShowAddPerfume] = useState(false);
