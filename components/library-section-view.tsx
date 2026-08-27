@@ -16,12 +16,14 @@ type Target = { kind: "collection" } | { kind: "wishlist"; wishlistId: number };
 
 export function LibrarySectionView({
   title,
+  aside,
   items,
   target,
   prevHref,
   nextHref,
 }: {
   title: string;
+  aside?: React.ReactNode;
   items: LibraryItem[];
   target: Target;
   prevHref: string | null;
@@ -43,6 +45,8 @@ export function LibrarySectionView({
 
   return (
     <div className="flex flex-col gap-5 px-4 pt-20">
+      {aside && <div className="-mb-2 text-center text-sm text-muted-foreground">{aside}</div>}
+
       <div className="flex items-center justify-between">
         <Link
           href={prevHref ?? "#"}
