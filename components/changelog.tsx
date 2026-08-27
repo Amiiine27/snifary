@@ -2,6 +2,16 @@
 // Version la plus recente en premier.
 const CHANGELOG: { version: string; changes: string[] }[] = [
   {
+    version: "1.16",
+    changes: [
+      "Le carrousel des wishlists permet aussi de revenir a la collection",
+      "Wishlists reordonnables depuis l'accueil (fleches haut/bas)",
+      "L'upload de photo ne bloque plus l'edition du reste du formulaire",
+      "Possible d'ajouter une autre variante d'un parfum deja present (ex. une nouvelle concentration)",
+      "Cloche d'avis pour le compte admin, en haut a gauche",
+    ],
+  },
+  {
     version: "1.15",
     changes: [
       "Nouvelle source d'image (Open Beauty Facts), en plus de Wikipedia -- surtout efficace sur les grandes marques",

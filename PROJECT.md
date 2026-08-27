@@ -416,6 +416,15 @@ Snifary, mais a garder en tete si on refait du scraping cible sur ce site.
    `uploadPerfumeImageAction`, notes en champs texte separes par virgules,
    memes champs prix/contenance/concentration/genre/tags) ->
    `createManualPerfumeAction`. `fragranticaUrl` reste `null` pour ces entrees.
+   Le bouton manuel n'est **plus** cache des qu'un resultat existe deja
+   (`canAddManually` dans `add-perfume-dialog.tsx`, ex-`noResultsAtAll`) :
+   avant, une fois un premier "Paradigme" ajoute manuellement, retaper
+   "Paradigme" le trouvait sous "Deja dans Snifary" et cachait le bouton
+   manuel, empechant d'ajouter une AUTRE variante reelle du meme nom (ex.
+   "Paradigme Le Parfum" en EDP a cote du "Paradigme" parfum) — corrige
+   suite a un cas reel rencontre par l'utilisateur. `canAddManually` ne
+   depend plus que d'une recherche valide et stabilisee (ni trop courte, ni
+   en cours de chargement local/distant), jamais du nombre de resultats.
 5. Suppression de fond (`lib/remove-background.ts`, `@imgly/background-removal`,
    modele `isnet_quint8`, 100% navigateur/WASM, import dynamique) appliquee
    **uniquement sur les images uploadees manuellement** (fichier local, pas de
@@ -452,15 +461,18 @@ depuis cet ecran.
 
 **Fleches precedent/suivant** de `LibrarySectionView` : entre deux wishlists,
 navigation libre dans les deux sens. Depuis la collection (`/stats` et
-`/library/collection`), en revanche, uniquement un "next" vers la premiere
-wishlist — jamais de "prev" (la collection est toujours le point de depart).
-Depuis une wishlist, le "prev" ne remonte jamais jusqu'a la collection non
-plus, seulement vers la wishlist precedente — demande explicite d'origine
-pour ne pas suggerer un lien navigable *retour* vers la collection depuis
-une wishlist. **C'est ce fil collection -> wishlist1 -> wishlist2 -> ...
-qui fait office de "carrousel"** maintenant que `/wishlists` a ete retire de
-la nav (voir plus haut) : la collection (bouton "Collection" de la nav) est
-devenue le seul point d'entree vers les wishlists.
+`/library/collection`), uniquement un "next" vers la premiere wishlist —
+jamais de "prev" (la collection reste le point de depart). Depuis la
+**premiere** wishlist, le "prev" pointe desormais vers la collection
+(`app/(app)/library/wishlist/[id]/page.tsx`, `sectionHref(sections[0])`) —
+inverse d'une restriction anterieure ("jamais de retour vers la collection
+depuis une wishlist") suite a un retour explicite : l'utilisateur veut
+pouvoir boucler dans les deux sens. **C'est ce fil collection <-> wishlist1
+<-> wishlist2 <-> ... qui fait office de "carrousel"** maintenant que
+`/wishlists` a ete retire de la nav (voir plus haut) : la collection
+(bouton "Collection" de la nav) reste le point d'entree principal, mais on
+peut desormais y revenir depuis n'importe quelle wishlist en remontant la
+chaine.
 
 **Suppression de fond** (`lib/remove-background.ts`, `@imgly/background-removal`,
 modele `isnet_quint8`) appliquee sur toute image uploadee manuellement (creation
@@ -475,6 +487,18 @@ generique "Impossible de traiter l'image" qui ne disait pas laquelle des deux
 etapes (suppression de fond vs upload) avait plante. Corrige via
 `experimental.serverActions.bodySizeLimit: "10mb"` dans `next.config.ts` — a
 garder si on retouche cette config, sans quoi le bug revient silencieusement.
+
+**Upload d'image asynchrone dans `ManualForm`** : `handleFile` n'est plus
+attendu par le reste du formulaire — il lance la suppression de fond + l'upload
+Cloudinary dans une IIFE dont la promesse est stockee dans `uploadPromiseRef`
+(pas dans un state), pendant que `name`/`brand`/notes/`meta` restent editables
+sans attendre. Seul le bouton "Ajouter" attend potentiellement : `canSubmit` ne
+depend plus de `uploading`, et `handleSubmitClick` `await`
+`uploadPromiseRef.current` (deja resolue si l'upload est fini, sinon bref
+spinner via un state local `waitingForImage` dedie) avant d'appeler `onConfirm`
+avec le `imagePublicId` final. Corrige suite a un retour explicite : l'ancien
+comportement bloquait le bouton "Ajouter" (donc *semblait* bloquer tout le
+formulaire) tant que la photo n'etait pas uploadee.
 
 ## Navigation / structure des pages
 
@@ -499,7 +523,14 @@ garder si on retouche cette config, sans quoi le bug revient silencieusement.
   tout" -> `/discover` (version detaillee, voir plus bas). Puis apercu de
   chaque section (collection d'abord, puis chaque wishlist dans l'ordre de
   `position`), lien "voir tout" vers la page dediee. Bouton "+ Nouvelle
-  wishlist" en bas.
+  wishlist" en bas. **Wishlists reordonnables** : `WishlistReorderButtons`
+  (`components/wishlist-reorder-buttons.tsx`, fleches haut/bas) affiche a
+  cote (jamais dans, un `<button>` imbrique dans le `<a>` de `Link` serait
+  invalide) du titre de chaque `SectionPreview` de type wishlist — jamais
+  sur la collection, toujours fixee en tete. `moveWishlistAction`
+  (`lib/actions/wishlists.ts`) fait un simple echange de `position` avec la
+  voisine (pas de renumerotation complete de la liste, suffisant puisque
+  `createWishlistAction` incremente toujours depuis le max existant).
 - `app/(app)/brands/[brand]/page.tsx` — catalogue complet d'une marque, tire
   du meme dataset local (`getBrandCatalog`, comparaison de marque insensible
   a la casse). Atteinte en tapant le nom de la marque (devenu lien) dans
@@ -524,14 +555,15 @@ garder si on retouche cette config, sans quoi le bug revient silencieusement.
 - `app/(app)/library/collection/page.tsx` et
   `app/(app)/library/wishlist/[id]/page.tsx` — vue complete d'**une seule**
   section a la fois (`components/library-section-view.tsx`, partage) :
-  grille/liste, modal de filtres, `AddFab`. Navigation prev/next **limitee aux
-  wishlists entre elles** (la collection n'est jamais accessible depuis une
-  wishlist par ces fleches, demande explicite) ; la collection n'a pas de
-  prev, et son next pointe vers la premiere wishlist. **C'est ce carrousel
-  prev/next, ancre sur `/stats` (bouton "Collection" de la nav), qui sert
-  maintenant de seul chemin vers les wishlists** — `app/(app)/wishlists/page.tsx`
-  (redirection vers la premiere wishlist, ex-cible du bouton "coeur") a ete
-  supprime : redondant, la nav "Collection" y menait deja via le "next".
+  grille/liste, modal de filtres, `AddFab`. Navigation prev/next libre entre
+  wishlists, et la premiere wishlist boucle vers la collection via son
+  "prev" (voir section Flow d'ajout plus haut pour le detail) ; la
+  collection elle-meme n'a pas de prev, et son next pointe vers la premiere
+  wishlist. **C'est ce carrousel prev/next, ancre sur `/stats` (bouton
+  "Collection" de la nav), qui sert maintenant de seul chemin vers les
+  wishlists** — `app/(app)/wishlists/page.tsx` (redirection vers la premiere
+  wishlist, ex-cible du bouton "coeur") a ete supprime : redondant, la nav
+  "Collection" y menait deja via le "next".
 - `app/(app)/discover/page.tsx` — version detaillee de la section Decouvrir
   de l'accueil, cible du bouton "Decouvrir" de la bottom nav (remplace
   l'ancien "coeur"/Wishlists). `components/discover-page-view.tsx` : 30
@@ -561,6 +593,34 @@ garder si on retouche cette config, sans quoi le bug revient silencieusement.
   en premier — donnees statiques maintenues a la main dans ce fichier a
   chaque changement notable, pas de table dediee (volume trop faible pour
   le justifier).
+- `app/(app)/admin/feedback/page.tsx` — liste complete des avis envoyes
+  (`listAllFeedbackAction`), reservee au compte admin. Voir section Admin
+  ci-dessous.
+
+## Admin (compte unique, code en dur)
+
+Pas de colonne `role` sur `user` : un seul admin sur ce projet perso, une
+vraie gestion de roles serait de la complexite pour un gain nul a cette
+echelle. `lib/admin.ts` exporte `isAdminEmail(email)`, qui compare a une
+constante `amineakh2004@gmail.com` codee en dur (l'email du proprietaire du
+projet). Si ce compte change un jour, modifier cette seule constante.
+
+- `components/app-top-bar.tsx` (`AppTopBar`) est devenu un composant async
+  (`requireUser()` + `isAdminEmail()`) : le slot vide a gauche (oppose au
+  toggle theme a droite, voir section UI) affiche une cloche
+  (`lucide-react` `Bell`) uniquement pour l'admin, avec un badge rond
+  affichant le nombre total d'avis (`getFeedbackCountAction`,
+  `lib/actions/feedback.ts` — requete `count(*)` dediee, plus legere qu'un
+  `listAllFeedbackAction` complet vu que ce composant est rendu sur
+  **chaque** page). Lien vers `/admin/feedback`.
+- `app/(app)/admin/feedback/page.tsx` : `notFound()` (pas une redirection)
+  si l'utilisateur connecte n'est pas l'admin — pour ne pas laisser deviner
+  que la route existe. Liste tous les avis (`listAllFeedbackAction`, tri
+  `createdAt` desc), username/email/date/message par entree.
+- `listAllFeedbackAction`/`getFeedbackCountAction` (`lib/actions/feedback.ts`)
+  verifient toutes les deux `isAdminEmail` cote serveur (jamais uniquement
+  cote UI) — meme reflexe de securite que le reste de l'app : ne jamais
+  faire confiance a l'affichage conditionnel seul pour proteger une donnee.
 
 ## UI / conventions a respecter
 
@@ -570,7 +630,9 @@ garder si on retouche cette config, sans quoi le bug revient silencieusement.
   logo similaire mais dans des contextes differents. `AppTopBar`
   (`components/app-top-bar.tsx`) = persistant sur toutes les pages `(app)`,
   flottant, sans fond ni bordure (demande explicite : pas de "barre" visible,
-  juste le logo+tagline+toggle qui flottent sur le fond de la page).
+  juste le logo+tagline+toggle qui flottent sur le fond de la page). Grid a 3
+  colonnes : slot gauche (cloche admin si applicable, sinon vide, voir
+  section Admin), logo+tagline au centre, toggle theme a droite.
   `BrandHeader` (`components/brand-header.tsx`) = utilise uniquement par
   `/login`, plus "splash". Si l'un des deux change de logique de mise en page,
   verifier si l'autre doit suivre.

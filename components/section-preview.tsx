@@ -2,24 +2,36 @@ import Link from "next/link";
 import Image from "next/image";
 import { ChevronRight, Droplet } from "lucide-react";
 import type { PerfumeDetails } from "@/lib/perfumes";
+import { WishlistReorderButtons } from "@/components/wishlist-reorder-buttons";
 
 export function SectionPreview({
   title,
   href,
   perfumes,
+  reorder,
 }: {
   title: string;
   href: string;
   perfumes: PerfumeDetails[];
+  reorder?: { wishlistId: number; canMoveUp: boolean; canMoveDown: boolean };
 }) {
   const preview = perfumes.slice(0, 4);
 
   return (
     <section className="flex flex-col gap-3">
-      <Link href={href} className="flex items-center justify-between">
-        <h2 className="font-heading text-xl">{title}</h2>
-        <ChevronRight className="size-5 text-muted-foreground" />
-      </Link>
+      <div className="flex items-center justify-between">
+        <Link href={href} className="flex flex-1 items-center justify-between">
+          <h2 className="font-heading text-xl">{title}</h2>
+          <ChevronRight className="size-5 text-muted-foreground" />
+        </Link>
+        {reorder && (
+          <WishlistReorderButtons
+            wishlistId={reorder.wishlistId}
+            canMoveUp={reorder.canMoveUp}
+            canMoveDown={reorder.canMoveDown}
+          />
+        )}
+      </div>
 
       {preview.length === 0 ? (
         <Link

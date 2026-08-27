@@ -18,14 +18,22 @@ export default async function HomePage() {
     <div className="flex flex-col gap-8 px-4 pb-6">
       <DiscoverSection perfumes={discoverPerfumes} wishlists={wishlists} />
 
-      {sections.map((section) => (
-        <SectionPreview
-          key={section.kind === "collection" ? "collection" : `wishlist-${section.id}`}
-          title={section.name}
-          href={sectionHref(section)}
-          perfumes={section.items.map((i) => i.perfume)}
-        />
-      ))}
+      {sections.map((section) => {
+        const wishlistIndex = section.kind === "wishlist" ? wishlists.findIndex((w) => w.id === section.id) : -1;
+        return (
+          <SectionPreview
+            key={section.kind === "collection" ? "collection" : `wishlist-${section.id}`}
+            title={section.name}
+            href={sectionHref(section)}
+            perfumes={section.items.map((i) => i.perfume)}
+            reorder={
+              section.kind === "wishlist"
+                ? { wishlistId: section.id, canMoveUp: wishlistIndex > 0, canMoveDown: wishlistIndex < wishlists.length - 1 }
+                : undefined
+            }
+          />
+        );
+      })}
 
       <NewWishlistButton />
     </div>

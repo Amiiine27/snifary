@@ -75,3 +75,30 @@ async function assertWishlistItemOwnedByUser(itemId: number, userId: string) {
     .where(and(eq(wishlistItems.id, itemId), eq(wishlists.userId, userId)));
   if (!row) throw new Error("Item introuvable");
 }
+
+// Reordonne les wishlists sur l'accueil (fleches haut/bas). Simple echange
+// de `position` avec la voisine plutot qu'une renumerotation complete de la
+// liste -- suffisant ici, pas de trous ni de doublons possibles puisque
+// `createWishlistAction` incremente toujours depuis le max existant.
+export async function moveWishlistAction(wishlistId: number, direction: "up" | "down"): Promise<void> {
+  const user = await requireUser();
+  const userWishlists = await db
+    .select()
+    .from(wishlists)
+    .where(eq(wishlists.userId, user.id))
+    .orderBy(wishlists.position);
+
+  const index = userWishlists.findIndex((w) => w.id === wishlistId);
+  if (index === -1) return; // pas trouvee (ou pas a cet utilisateur) : no-op silencieux
+
+  const swapIndex = direction === "up" ? index - 1 : index + 1;
+  if (swapIndex < 0 || swapIndex >= userWishlists.length) return;
+
+  const current = userWishlists[index];
+  const neighbor = userWishlists[swapIndex];
+
+  await db.update(wishlists).set({ position: neighbor.position }).where(eq(wishlists.id, current.id));
+  await db.update(wishlists).set({ position: current.position }).where(eq(wishlists.id, neighbor.id));
+
+  revalidatePath("/");
+}

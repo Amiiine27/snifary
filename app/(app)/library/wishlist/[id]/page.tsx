@@ -9,8 +9,10 @@ export default async function WishlistPage({ params }: { params: Promise<{ id: s
   const user = await requireUser();
   const sections = await getLibrarySections(user.id);
 
-  // Navigation prev/next limitee aux autres wishlists : la collection n'est
-  // volontairement pas accessible depuis ici (cf retour utilisateur).
+  // Navigation prev/next entre wishlists, et retour a la collection depuis
+  // la premiere -- demande explicite (le comportement precedent, qui ne
+  // remontait jamais jusqu'a la collection depuis une wishlist, a ete
+  // inverse : voir PROJECT.md).
   const wishlists = sections.filter((s) => s.kind === "wishlist");
   const index = wishlists.findIndex((s) => s.id === wishlistId);
   if (index === -1) notFound();
@@ -27,7 +29,7 @@ export default async function WishlistPage({ params }: { params: Promise<{ id: s
       title={section.name}
       items={items}
       target={{ kind: "wishlist", wishlistId }}
-      prevHref={index > 0 ? sectionHref(wishlists[index - 1]) : null}
+      prevHref={index > 0 ? sectionHref(wishlists[index - 1]) : sectionHref(sections[0])}
       nextHref={index + 1 < wishlists.length ? sectionHref(wishlists[index + 1]) : null}
       wishlists={wishlists.map((w) => ({ id: w.id, name: w.name }))}
     />

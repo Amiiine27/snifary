@@ -182,12 +182,12 @@ export function AddPerfumeDialog({
     });
   }
 
-  const noResultsAtAll =
-    !queryTooShort &&
-    !localSearching &&
-    !remoteSearching &&
-    (localResults?.length ?? 0) === 0 &&
-    (remoteResults?.length ?? 0) === 0;
+  // Deliberement pas limite au cas "zero resultat" : une fois un premier
+  // parfum ajoute (ex. "Paradigme" en manuel), retaper le meme nom pour
+  // ajouter une AUTRE variante (ex. "Paradigme Le Parfum") le trouvait sous
+  // "Deja dans Snifary" et cachait le bouton manuel du coup -- aucun moyen
+  // d'ajouter la seconde variante sans repartir d'une recherche differente.
+  const canAddManually = !queryTooShort && !localSearching && !remoteSearching;
 
   return (
     <Dialog
@@ -258,7 +258,7 @@ export function AddPerfumeDialog({
               </ResultGroup>
             )}
 
-            {noResultsAtAll && (
+            {canAddManually && (
               <Button variant="outline" onClick={() => setView("manual")}>
                 <Plus /> Ajouter un parfum manuellement
               </Button>
@@ -443,7 +443,6 @@ export function ManualForm({
   const fileRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState(initial?.name ?? "");
   const [brand, setBrand] = useState(initial?.brand ?? "");
-  const [imagePublicId, setImagePublicId] = useState<string | null>(initial?.imagePublicId ?? null);
   const [imagePreview, setImagePreview] = useState<string | null>(initial?.imagePreviewUrl ?? null);
   const [uploading, setUploading] = useState(false);
   const [topNotes, setTopNotes] = useState(initial?.notes?.top.join(", ") ?? "");
@@ -461,35 +460,63 @@ export function ManualForm({
     }
   );
 
-  async function handleFile(file: File | undefined) {
+  // L'upload tourne en arriere-plan (voir handleFile) : le reste du formulaire
+  // reste editable pendant ce temps. Seul le bouton "Ajouter" attend, et
+  // uniquement si l'utilisateur clique avant que l'upload soit termine --
+  // cette promesse est ce qu'il attend a ce moment-la (voir handleSubmit).
+  const uploadPromiseRef = useRef<Promise<string | null>>(Promise.resolve(initial?.imagePublicId ?? null));
+  const [waitingForImage, setWaitingForImage] = useState(false);
+
+  function handleFile(file: File | undefined) {
     if (!file) return;
     setUploading(true);
 
-    // La suppression de fond est un plus, pas une condition bloquante : si
-    // elle echoue (reseau, CDN du modele injoignable, etc.) on continue avec
-    // l'image d'origine plutot que d'empecher tout l'ajout du parfum.
-    let toUpload: Blob = file;
-    try {
-      toUpload = await removeImageBackground(file);
-    } catch (err) {
-      console.error("Suppression de fond echouee, image originale conservee :", err);
-      toast.info("Suppression du fond indisponible, image d'origine conservee");
-    }
+    uploadPromiseRef.current = (async () => {
+      // La suppression de fond est un plus, pas une condition bloquante : si
+      // elle echoue (reseau, CDN du modele injoignable, etc.) on continue avec
+      // l'image d'origine plutot que d'empecher tout l'ajout du parfum.
+      let toUpload: Blob = file;
+      try {
+        toUpload = await removeImageBackground(file);
+      } catch (err) {
+        console.error("Suppression de fond echouee, image originale conservee :", err);
+        toast.info("Suppression du fond indisponible, image d'origine conservee");
+      }
 
-    try {
-      const uploadFile = new File([toUpload], "perfume.png", { type: toUpload.type || file.type });
-      const publicId = await uploadPerfumeImageAction(uploadFile);
-      setImagePublicId(publicId);
-      setImagePreview(URL.createObjectURL(toUpload));
-    } catch (err) {
-      console.error("Upload de l'image echoue :", err);
-      toast.error("Impossible d'uploader l'image");
-    } finally {
-      setUploading(false);
-    }
+      try {
+        const uploadFile = new File([toUpload], "perfume.png", { type: toUpload.type || file.type });
+        const publicId = await uploadPerfumeImageAction(uploadFile);
+        setImagePreview(URL.createObjectURL(toUpload));
+        return publicId;
+      } catch (err) {
+        console.error("Upload de l'image echoue :", err);
+        toast.error("Impossible d'uploader l'image");
+        return null;
+      } finally {
+        setUploading(false);
+      }
+    })();
   }
 
-  const canSubmit = name.trim().length > 0 && brand.trim().length > 0 && !uploading;
+  const canSubmit = name.trim().length > 0 && brand.trim().length > 0;
+
+  async function handleSubmitClick() {
+    setWaitingForImage(true);
+    const finalImagePublicId = await uploadPromiseRef.current;
+    setWaitingForImage(false);
+    onConfirm({
+      name,
+      brand,
+      imagePublicId: finalImagePublicId,
+      inspiredBy: isClone ? inspiredBy : null,
+      ...meta,
+      notes: {
+        top: parseNotesList(topNotes),
+        heart: parseNotesList(heartNotes),
+        base: parseNotesList(baseNotes),
+      },
+    });
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -547,25 +574,8 @@ export function ManualForm({
         <Button variant="outline" className="flex-1" onClick={onCancel} disabled={pending}>
           Retour
         </Button>
-        <Button
-          className="flex-1"
-          disabled={pending || !canSubmit}
-          onClick={() =>
-            onConfirm({
-              name,
-              brand,
-              imagePublicId,
-              inspiredBy: isClone ? inspiredBy : null,
-              ...meta,
-              notes: {
-                top: parseNotesList(topNotes),
-                heart: parseNotesList(heartNotes),
-                base: parseNotesList(baseNotes),
-              },
-            })
-          }
-        >
-          {pending ? "..." : submitLabel}
+        <Button className="flex-1" disabled={pending || !canSubmit || waitingForImage} onClick={handleSubmitClick}>
+          {pending || waitingForImage ? "..." : submitLabel}
         </Button>
       </div>
     </div>
