@@ -45,7 +45,7 @@ export function LibrarySectionView({
 
   return (
     <div className="flex flex-col gap-5 px-4 pt-4">
-      {aside && <div className="-mb-2 text-center text-sm text-muted-foreground">{aside}</div>}
+      {aside && <div className="flex flex-wrap justify-center gap-2">{aside}</div>}
 
       {target.kind === "wishlist" ? (
         <div className="flex items-center justify-between">
