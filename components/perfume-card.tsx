@@ -18,14 +18,14 @@ export function PerfumeCard({
     return (
       <button
         onClick={onClick}
-        className="flex w-full items-center gap-3 rounded-lg border border-border p-2 text-left transition-colors hover:bg-muted"
+        className="flex w-full items-center gap-4 rounded-xl border border-border p-3 text-left transition-colors hover:bg-muted"
       >
-        <Thumb imageUrl={perfume.imageUrl} name={perfume.name} className="size-14 shrink-0" />
+        <Thumb imageUrl={perfume.imageUrl} name={perfume.name} className="size-16 shrink-0" />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{perfume.name}</p>
-          <p className="truncate text-xs text-muted-foreground">{perfume.brand}</p>
+          <p className="truncate text-base font-medium">{perfume.name}</p>
+          <p className="truncate text-sm text-muted-foreground">{perfume.brand}</p>
         </div>
-        <PriceTag perfume={perfume} />
+        <PriceTag perfume={perfume} className="text-sm" />
       </button>
     );
   }
@@ -33,11 +33,11 @@ export function PerfumeCard({
   return (
     <button
       onClick={onClick}
-      className="flex flex-col items-start gap-1.5 rounded-lg border border-border p-2 text-left transition-colors hover:bg-muted"
+      className="flex flex-col items-start gap-2 rounded-xl border border-border p-3 text-left transition-colors hover:bg-muted"
     >
       <Thumb imageUrl={perfume.imageUrl} name={perfume.name} className="aspect-square w-full" />
-      <p className="line-clamp-2 w-full text-xs font-medium leading-tight">{perfume.name}</p>
-      <PriceTag perfume={perfume} className="text-[11px]" />
+      <p className="line-clamp-2 w-full text-sm font-medium leading-tight">{perfume.name}</p>
+      <PriceTag perfume={perfume} className="text-xs" />
     </button>
   );
 }

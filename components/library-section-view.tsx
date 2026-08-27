@@ -7,13 +7,12 @@ import type { PerfumeDetails } from "@/lib/perfumes";
 import { PerfumeCard } from "@/components/perfume-card";
 import { PerfumeDetailSheet } from "@/components/perfume-detail-sheet";
 import { AddPerfumeSheet } from "@/components/add-perfume-sheet";
+import { FiltersSheet, EMPTY_FILTERS, type LibraryFilters } from "@/components/filters-sheet";
 import { cn } from "@/lib/utils";
 
 export type LibraryItem = { itemId: number; perfume: PerfumeDetails; personalNote: string | null };
 
 type Target = { kind: "collection" } | { kind: "wishlist"; wishlistId: number };
-
-const GENDER_FILTERS = ["homme", "femme", "unisexe"] as const;
 
 export function LibrarySectionView({
   title,
@@ -29,71 +28,67 @@ export function LibrarySectionView({
   nextHref: string | null;
 }) {
   const [view, setView] = useState<"grid" | "list">("grid");
-  const [genderFilter, setGenderFilter] = useState<string | null>(null);
+  const [filters, setFilters] = useState<LibraryFilters>(EMPTY_FILTERS);
   const [selected, setSelected] = useState<LibraryItem | null>(null);
 
   const filtered = useMemo(
-    () => (genderFilter ? items.filter((i) => i.perfume.gender === genderFilter) : items),
-    [items, genderFilter]
+    () =>
+      items.filter((i) => {
+        if (filters.gender && i.perfume.gender !== filters.gender) return false;
+        if (filters.tags.length > 0 && !filters.tags.some((t) => i.perfume.tags.includes(t))) return false;
+        return true;
+      }),
+    [items, filters]
   );
 
   return (
-    <div className="flex flex-col gap-4 px-4 pt-6">
+    <div className="flex flex-col gap-5 px-4 pt-6">
       <div className="flex items-center justify-between">
         <Link
           href={prevHref ?? "#"}
           aria-disabled={!prevHref}
-          className={cn("p-1", !prevHref && "pointer-events-none opacity-30")}
+          className={cn("p-1.5", !prevHref && "pointer-events-none opacity-30")}
         >
-          <ChevronLeft className="size-5" />
+          <ChevronLeft className="size-6" />
         </Link>
-        <h1 className="text-lg font-semibold">{title}</h1>
+        <h1 className="font-heading text-2xl">{title}</h1>
         <Link
           href={nextHref ?? "#"}
           aria-disabled={!nextHref}
-          className={cn("p-1", !nextHref && "pointer-events-none opacity-30")}
+          className={cn("p-1.5", !nextHref && "pointer-events-none opacity-30")}
         >
-          <ChevronRight className="size-5" />
+          <ChevronRight className="size-6" />
         </Link>
       </div>
 
       <div className="flex items-center justify-between">
-        <div className="flex gap-1">
-          {GENDER_FILTERS.map((g) => (
-            <button
-              key={g}
-              onClick={() => setGenderFilter((prev) => (prev === g ? null : g))}
-              className={cn(
-                "rounded-full border border-border px-2.5 py-1 text-xs capitalize transition-colors",
-                genderFilter === g ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted"
-              )}
-            >
-              {g}
-            </button>
-          ))}
-        </div>
-        <div className="flex gap-1">
+        <FiltersSheet filters={filters} onChange={setFilters} />
+        <div className="flex gap-1.5">
           <button
             onClick={() => setView("grid")}
-            className={cn("rounded-md p-1.5", view === "grid" ? "bg-muted" : "text-muted-foreground")}
+            className={cn("rounded-lg p-2.5", view === "grid" ? "bg-muted" : "text-muted-foreground")}
+            aria-label="Vue grille"
           >
-            <Grid2x2 className="size-4" />
+            <Grid2x2 className="size-5" />
           </button>
           <button
             onClick={() => setView("list")}
-            className={cn("rounded-md p-1.5", view === "list" ? "bg-muted" : "text-muted-foreground")}
+            className={cn("rounded-lg p-2.5", view === "list" ? "bg-muted" : "text-muted-foreground")}
+            aria-label="Vue liste"
           >
-            <List className="size-4" />
+            <List className="size-5" />
           </button>
         </div>
       </div>
 
       {filtered.length === 0 ? (
         <p className="py-12 text-center text-sm text-muted-foreground">
-          Rien ici pour l&apos;instant. Ajoute un premier parfum avec le bouton +.
+          {items.length === 0
+            ? "Rien ici pour l'instant. Ajoute un premier parfum avec le bouton +."
+            : "Aucun parfum ne correspond a ces filtres."}
         </p>
       ) : (
-        <div className={view === "grid" ? "grid grid-cols-3 gap-2.5" : "flex flex-col gap-2"}>
+        <div className={view === "grid" ? "grid grid-cols-3 gap-3" : "flex flex-col gap-2.5"}>
           {filtered.map((item) => (
             <PerfumeCard
               key={item.itemId}

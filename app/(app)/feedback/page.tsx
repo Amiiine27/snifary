@@ -7,8 +7,8 @@ export default async function FeedbackPage() {
   return (
     <div className="flex flex-col gap-6 px-4 pt-8">
       <div>
-        <h1 className="text-2xl font-semibold">Snifary</h1>
-        <p className="text-sm text-muted-foreground">Ton avis compte !</p>
+        <h1 className="font-heading text-3xl">Snifary</h1>
+        <p className="text-base text-muted-foreground">Ton avis compte !</p>
       </div>
 
       <p className="text-sm text-muted-foreground">

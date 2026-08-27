@@ -101,17 +101,17 @@ function DetailBody({
   return (
     <>
       <SheetHeader className="items-center text-center">
-        <div className="relative mb-2 h-40 w-32 overflow-hidden rounded-lg bg-muted">
+        <div className="relative mb-2 h-48 w-36 overflow-hidden rounded-lg bg-muted">
           {perfume.imageUrl ? (
             <Image src={perfume.imageUrl} alt={perfume.name} fill sizes="200px" className="object-cover" />
           ) : (
             <div className="flex size-full items-center justify-center text-muted-foreground">
-              <Droplet className="size-8" />
+              <Droplet className="size-10" />
             </div>
           )}
         </div>
-        <SheetTitle className="text-lg">{perfume.name}</SheetTitle>
-        <p className="text-sm text-muted-foreground">{perfume.brand}</p>
+        <SheetTitle className="text-xl">{perfume.name}</SheetTitle>
+        <p className="text-base text-muted-foreground">{perfume.brand}</p>
       </SheetHeader>
 
       <div className="flex flex-wrap items-center justify-center gap-3 px-4 text-sm text-muted-foreground">
@@ -172,12 +172,12 @@ function NotesRow({ label, notes }: { label: string; notes: string[] }) {
   if (notes.length === 0) return null;
   return (
     <div>
-      <p className="mb-1.5 text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+      <p className="mb-2 text-center text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </p>
-      <div className="flex flex-wrap justify-center gap-1.5">
+      <div className="flex flex-wrap justify-center gap-2">
         {notes.map((n) => (
-          <span key={n} className="rounded-full bg-muted px-2.5 py-1 text-xs">
+          <span key={n} className="rounded-full bg-muted px-3 py-1.5 text-sm">
             {n}
           </span>
         ))}

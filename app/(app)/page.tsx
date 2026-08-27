@@ -11,8 +11,8 @@ export default async function HomePage() {
   return (
     <div className="flex flex-col gap-8 px-4 pb-6 pt-8">
       <div>
-        <h1 className="text-2xl font-semibold">Snifary</h1>
-        <Tagline className="text-sm text-muted-foreground" />
+        <h1 className="font-heading text-3xl">Snifary</h1>
+        <Tagline className="text-base text-muted-foreground" />
       </div>
 
       {sections.map((section) => (

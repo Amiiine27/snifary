@@ -31,11 +31,11 @@ export function BottomNav() {
               <Link
                 href={href}
                 className={cn(
-                  "flex flex-col items-center gap-0.5 py-2.5 text-[11px] transition-colors",
+                  "flex flex-col items-center gap-1 py-3 text-xs transition-colors",
                   active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                <Icon className="size-5" strokeWidth={active ? 2.25 : 1.75} />
+                <Icon className="size-6" strokeWidth={active ? 2.25 : 1.75} />
                 <span>{label}</span>
               </Link>
             </li>

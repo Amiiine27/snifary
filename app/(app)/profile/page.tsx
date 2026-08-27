@@ -8,7 +8,7 @@ export default async function ProfilePage() {
 
   return (
     <div className="flex flex-col gap-8 px-4 pt-8">
-      <h1 className="text-center text-2xl font-semibold">Snifary</h1>
+      <h1 className="text-center font-heading text-3xl">Snifary</h1>
 
       <AvatarUploader name={user.name} image={user.image ?? null} />
 

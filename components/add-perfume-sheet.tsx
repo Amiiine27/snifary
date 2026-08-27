@@ -96,9 +96,9 @@ export function AddPerfumeSheet({ target }: { target: Target }) {
   return (
     <>
       <Button
-        size="icon-lg"
-        className="fixed bottom-24 right-4 z-30 rounded-full shadow-lg"
+        className="fixed bottom-24 right-4 z-30 size-16 rounded-full shadow-lg [&_svg:not([class*='size-'])]:size-7"
         onClick={() => setOpen(true)}
+        aria-label="Ajouter un parfum"
       >
         <Plus />
       </Button>
