@@ -2,6 +2,18 @@
 // Version la plus recente en premier.
 const CHANGELOG: { version: string; changes: string[] }[] = [
   {
+    version: "1.18",
+    changes: [
+      "Meme affichage pour la collection et les wishlists : seuls le nom, les parfums et les chips changent",
+      "Chips \"X parfums\" / \"X€ au total\" sur les wishlists aussi",
+      "Bouton pour supprimer une wishlist entiere",
+    ],
+  },
+  {
+    version: "1.17",
+    changes: ["Avis archivables ou supprimables depuis la page admin"],
+  },
+  {
     version: "1.16",
     changes: [
       "Le carrousel des wishlists permet aussi de revenir a la collection",

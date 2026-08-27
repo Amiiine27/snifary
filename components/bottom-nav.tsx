@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 const items = [
   { href: "/feedback", icon: Lightbulb, label: "Avis", match: (p: string) => p.startsWith("/feedback") },
-  { href: "/stats", icon: Library, label: "Collection", match: (p: string) => p.startsWith("/stats") || p.startsWith("/library/wishlist") },
+  { href: "/library/collection", icon: Library, label: "Collection", match: (p: string) => p.startsWith("/library") },
   { href: "/", icon: Home, label: "Accueil", match: (p: string) => p === "/" },
   { href: "/discover", icon: Compass, label: "Decouvrir", match: (p: string) => p.startsWith("/discover") },
   { href: "/profile", icon: User, label: "Profil", match: (p: string) => p.startsWith("/profile") },

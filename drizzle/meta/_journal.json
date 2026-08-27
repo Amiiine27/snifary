@@ -43,6 +43,13 @@
       "when": 1787836971099,
       "tag": "0005_organic_turbo",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1787845674226,
+      "tag": "0006_clumsy_wolverine",
+      "breakpoints": true
     }
   ]
 }

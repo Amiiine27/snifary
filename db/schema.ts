@@ -220,6 +220,7 @@ export const feedback = sqliteTable(
     username: text("username").notNull(),
     email: text("email").notNull(),
     message: text("message").notNull(),
+    archived: integer("archived", { mode: "boolean" }).notNull().default(false),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
       .default(sql`(unixepoch())`),

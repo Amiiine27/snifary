@@ -104,7 +104,9 @@ schema actuel suffit toujours.
 - **`wishlist_items`** — pivot wishlist↔parfum ; unique `(wishlistId, perfumeId)`
 - **`feedback`** — avis envoyes depuis l'app. `username`/`email` sont
   **snapshotes** a l'envoi (pas de FK relationnelle vers `user` pour l'affichage),
-  `message` avec CHECK `length >= 20`
+  `message` avec CHECK `length >= 20`, `archived` (boolean, defaut `false`) —
+  archiver un avis le sort du badge de la cloche admin (voir section Admin)
+  sans le supprimer ; suppression definitive possible separement
 - **`fragrantica_reference`** — dataset public (Kaggle, voir section Scraping)
   importe une fois via script ponctuel, **pas de FK vers `perfumes`**. Sert
   uniquement de source de recherche a l'ajout : id, `fragranticaUrl` (unique),
@@ -460,9 +462,10 @@ un parfum / creer une nouvelle wishlist) car les deux actions sont legitimes
 depuis cet ecran.
 
 **Fleches precedent/suivant** de `LibrarySectionView` : entre deux wishlists,
-navigation libre dans les deux sens. Depuis la collection (`/stats` et
-`/library/collection`), uniquement un "next" vers la premiere wishlist —
-jamais de "prev" (la collection reste le point de depart). Depuis la
+navigation libre dans les deux sens. Depuis la collection
+(`/library/collection`, seule route pour la collection — voir plus bas),
+uniquement un "next" vers la premiere wishlist — jamais de "prev" (la
+collection reste le point de depart). Depuis la
 **premiere** wishlist, le "prev" pointe desormais vers la collection
 (`app/(app)/library/wishlist/[id]/page.tsx`, `sectionHref(sections[0])`) —
 inverse d'une restriction anterieure ("jamais de retour vers la collection
@@ -554,15 +557,33 @@ formulaire) tant que la photo n'etait pas uploadee.
   wishlist, ni de voir la fiche avant d'ecrire quoi que ce soit.
 - `app/(app)/library/collection/page.tsx` et
   `app/(app)/library/wishlist/[id]/page.tsx` — vue complete d'**une seule**
-  section a la fois (`components/library-section-view.tsx`, partage) :
-  grille/liste, modal de filtres, `AddFab`. Navigation prev/next libre entre
-  wishlists, et la premiere wishlist boucle vers la collection via son
-  "prev" (voir section Flow d'ajout plus haut pour le detail) ; la
-  collection elle-meme n'a pas de prev, et son next pointe vers la premiere
-  wishlist. **C'est ce carrousel prev/next, ancre sur `/stats` (bouton
-  "Collection" de la nav), qui sert maintenant de seul chemin vers les
-  wishlists** — `app/(app)/wishlists/page.tsx` (redirection vers la premiere
-  wishlist, ex-cible du bouton "coeur") a ete supprime : redondant, la nav
+  section a la fois (`components/library-section-view.tsx`, partage) : le
+  bouton "Collection" de la bottom nav pointe directement sur
+  `/library/collection` (route `/stats` supprimee — c'etait une deuxieme
+  page qui affichait la collection avec un rendu legerement different, un
+  reste de l'ancienne page "Statistiques" ; les deux existaient en parallele
+  et divergeaient visuellement, source directe du "l'affichage change entre
+  collection et wishlist" remonte par l'utilisateur). Desormais un seul
+  gabarit fixe pour la collection ET chaque wishlist — chips en haut,
+  fleches prev/next, filtres, grille/liste, `AddFab` — seul le contenu
+  change (nom, parfums, chiffres des chips) selon `target`, jamais la mise
+  en page. **Chips** : toujours 2, calculees directement dans
+  `LibrarySectionView` depuis les `items` recus (jamais une prop `aside`
+  optionnelle comme avant) — "N parfum(s) possede(s)" + "X€ depenses" pour
+  la collection, "N parfum(s)" + "X€ au total" pour une wishlist (somme des
+  prix des items de cette liste precise). **Suppression d'une wishlist** :
+  bouton poubelle (`DeleteWishlistButton`, dans `library-section-view.tsx`)
+  flottant juste au-dessus du FAB "+", visible uniquement quand
+  `target.kind === "wishlist"` (jamais sur la collection, qui ne se
+  supprime pas) — `confirm()` natif puis `deleteWishlistAction`, puis
+  redirection vers `/library/collection` (seul endroit stable une fois la
+  wishlist courante disparue). Navigation prev/next libre entre wishlists,
+  et la premiere wishlist boucle vers la collection via son "prev" (voir
+  section Flow d'ajout plus haut pour le detail) ; la collection elle-meme
+  n'a pas de prev, et son next pointe vers la premiere wishlist. **C'est ce
+  carrousel prev/next qui sert de seul chemin vers les wishlists** —
+  `app/(app)/wishlists/page.tsx` (redirection vers la premiere wishlist,
+  ex-cible du bouton "coeur") a ete supprime : redondant, la nav
   "Collection" y menait deja via le "next".
 - `app/(app)/discover/page.tsx` — version detaillee de la section Decouvrir
   de l'accueil, cible du bouton "Decouvrir" de la bottom nav (remplace
@@ -574,13 +595,6 @@ formulaire) tant que la photo n'etait pas uploadee.
   cote client), bouton "Autre selection" (`refreshDiscoverPerfumesAction`)
   pour retirer un nouveau lot sans quitter la page. Meme
   `ReferencePerfumeSheet` que Decouvrir/pages marque au tap.
-- `app/(app)/stats/page.tsx` — cible du bouton "Collection"/bibliotheque de la
-  bottom nav (route `/stats` conservee, label change). Affiche 2 chips
-  compactes ("N parfums possedes", "X€ depenses" — `StatChip` local au fichier,
-  passees via la prop `aside` de `LibrarySectionView`) **au-dessus** de la
-  collection complete (meme composant que `/library/collection`) — assez
-  visibles pour se voir au premier coup d'oeil, mais pas de grosses cartes
-  chiffrees comme avant : la collection reste le contenu principal de la page.
 - `app/(app)/profile/page.tsx` — avatar (upload/recadrage/suppression via
   `components/avatar-uploader.tsx` + `avatar-crop-dialog.tsx`,
   `react-easy-crop`), nom modifiable, deconnexion, suppression de compte,
@@ -616,11 +630,21 @@ projet). Si ce compte change un jour, modifier cette seule constante.
 - `app/(app)/admin/feedback/page.tsx` : `notFound()` (pas une redirection)
   si l'utilisateur connecte n'est pas l'admin — pour ne pas laisser deviner
   que la route existe. Liste tous les avis (`listAllFeedbackAction`, tri
-  `createdAt` desc), username/email/date/message par entree.
-- `listAllFeedbackAction`/`getFeedbackCountAction` (`lib/actions/feedback.ts`)
-  verifient toutes les deux `isAdminEmail` cote serveur (jamais uniquement
-  cote UI) — meme reflexe de securite que le reste de l'app : ne jamais
-  faire confiance a l'affichage conditionnel seul pour proteger une donnee.
+  `createdAt` desc), username/email/date/message par entree, via
+  `components/admin-feedback-list.tsx` (client, boutons Archiver/Restaurer
+  + Supprimer par entree).
+- `listAllFeedbackAction`/`getFeedbackCountAction`/`setFeedbackArchivedAction`/
+  `deleteFeedbackAction` (`lib/actions/feedback.ts`) verifient toutes
+  `isAdminEmail` cote serveur (jamais uniquement cote UI, factorise dans un
+  `requireAdmin()` local au fichier) — meme reflexe de securite que le reste
+  de l'app : ne jamais faire confiance a l'affichage conditionnel seul pour
+  proteger une donnee. **Archiver vs supprimer** : archiver (`archived: true`)
+  masque l'avis du badge de la cloche (`getFeedbackCountAction` ne compte que
+  `archived = false`) mais le garde consultable dans une section "Archives"
+  en bas de la page admin, reversible via "Restaurer" ; supprimer
+  (`deleteFeedbackAction`) est un `DELETE` definitif, confirme cote client
+  par un `confirm()` natif (meme convention que la suppression de compte,
+  section Profil).
 
 ## UI / conventions a respecter
 

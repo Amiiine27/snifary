@@ -1,0 +1,1 @@
+ALTER TABLE `feedback` ADD `archived` integer DEFAULT false NOT NULL;

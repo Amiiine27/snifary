@@ -1,10 +1,16 @@
 "use server";
 
-import { desc, sql } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
+import { desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { feedback } from "@/db/schema";
 import { requireUser } from "@/lib/session";
 import { isAdminEmail } from "@/lib/admin";
+
+async function requireAdmin() {
+  const user = await requireUser();
+  if (!isAdminEmail(user.email)) throw new Error("Non autorise");
+}
 
 export async function submitFeedbackAction(message: string) {
   const user = await requireUser();
@@ -22,18 +28,35 @@ export async function submitFeedbackAction(message: string) {
 }
 
 export async function listAllFeedbackAction() {
-  const user = await requireUser();
-  if (!isAdminEmail(user.email)) throw new Error("Non autorise");
-
+  await requireAdmin();
   return db.select().from(feedback).orderBy(desc(feedback.createdAt));
 }
 
 // Requete legere dediee au badge de la cloche (AppTopBar, rendu sur chaque
 // page) : pas besoin de rapatrier toutes les lignes juste pour un compteur.
+// Ne compte que les avis non archives -- archiver un avis sert justement a
+// le retirer du badge une fois traite.
 export async function getFeedbackCountAction(): Promise<number> {
   const user = await requireUser();
   if (!isAdminEmail(user.email)) return 0;
 
-  const [{ count }] = await db.select({ count: sql<number>`count(*)` }).from(feedback);
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(feedback)
+    .where(eq(feedback.archived, false));
   return count;
+}
+
+export async function setFeedbackArchivedAction(id: number, archived: boolean) {
+  await requireAdmin();
+  await db.update(feedback).set({ archived }).where(eq(feedback.id, id));
+  revalidatePath("/admin/feedback");
+  revalidatePath("/");
+}
+
+export async function deleteFeedbackAction(id: number) {
+  await requireAdmin();
+  await db.delete(feedback).where(eq(feedback.id, id));
+  revalidatePath("/admin/feedback");
+  revalidatePath("/");
 }

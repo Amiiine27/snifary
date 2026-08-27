@@ -35,6 +35,11 @@ export async function deleteWishlistAction(wishlistId: number) {
   const user = await requireUser();
   await db.delete(wishlists).where(and(eq(wishlists.id, wishlistId), eq(wishlists.userId, user.id)));
   revalidatePath("/");
+  // La suppression depuis la vue wishlist redirige vers la collection
+  // (voir DeleteWishlistButton) -- revalidee explicitement pour ne pas
+  // servir une version en cache du router qui listerait encore cette
+  // wishlist dans son carrousel prev/next.
+  revalidatePath("/library/collection");
 }
 
 export async function addItemToWishlistAction(wishlistId: number, perfumeId: number) {

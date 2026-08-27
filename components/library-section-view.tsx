@@ -1,23 +1,37 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Grid2x2, List } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ChevronLeft, ChevronRight, Grid2x2, List, Trash2 } from "lucide-react";
 import type { PerfumeDetails, ReferencePerfume } from "@/lib/perfumes";
 import { PerfumeCard } from "@/components/perfume-card";
 import { PerfumeDetailSheet } from "@/components/perfume-detail-sheet";
 import { ReferencePerfumeSheet } from "@/components/reference-perfume-sheet";
 import { AddFab } from "@/components/add-fab";
 import { FiltersSheet, EMPTY_FILTERS, type LibraryFilters } from "@/components/filters-sheet";
+import { Button } from "@/components/ui/button";
+import { deleteWishlistAction } from "@/lib/actions/wishlists";
 import { cn } from "@/lib/utils";
 
 export type LibraryItem = { itemId: number; perfume: PerfumeDetails; personalNote: string | null };
 
 type Target = { kind: "collection" } | { kind: "wishlist"; wishlistId: number };
 
+// Chips fixes en haut de la vue, jamais optionnelles : la collection et
+// chaque wishlist utilisent exactement le meme gabarit (voir PROJECT.md),
+// seul le contenu (chiffres + libelles) change selon `target.kind`.
+function StatChip({ value, label }: { value: string | number; label: string }) {
+  return (
+    <div className="flex items-baseline gap-1.5 rounded-full bg-muted px-3.5 py-2">
+      <span className="text-lg font-semibold">{value}</span>
+      <span className="text-xs text-muted-foreground">{label}</span>
+    </div>
+  );
+}
+
 export function LibrarySectionView({
   title,
-  aside,
   items,
   target,
   prevHref,
@@ -25,7 +39,6 @@ export function LibrarySectionView({
   wishlists,
 }: {
   title: string;
-  aside?: React.ReactNode;
   items: LibraryItem[];
   target: Target;
   prevHref: string | null;
@@ -50,9 +63,21 @@ export function LibrarySectionView({
     [items, filters]
   );
 
+  const count = items.length;
+  const totalPrice = items.reduce((sum, i) => sum + (i.perfume.price ?? 0), 0);
+  const isCollection = target.kind === "collection";
+
   return (
     <div className="flex flex-col gap-5 px-4 pt-4">
-      {aside && <div className="flex flex-wrap justify-center gap-2">{aside}</div>}
+      {/* Chips toujours affichees, meme gabarit collection/wishlist -- seul le
+          contenu change (voir StatChip plus haut et PROJECT.md). */}
+      <div className="flex flex-wrap justify-center gap-2">
+        <StatChip
+          value={count}
+          label={isCollection ? `parfum${count > 1 ? "s" : ""} possede${count > 1 ? "s" : ""}` : `parfum${count > 1 ? "s" : ""}`}
+        />
+        <StatChip value={`${totalPrice.toFixed(0)} €`} label={isCollection ? "depenses" : "au total"} />
+      </div>
 
       {/* Chevrons toujours affiches (pas seulement pour les wishlists) : depuis
           que l'icone "Wishlists" a quitte la bottom nav, cette fleche "next"
@@ -138,7 +163,39 @@ export function LibrarySectionView({
         onSelectSimilar={setSelectedSimilar}
       />
 
+      {target.kind === "wishlist" && <DeleteWishlistButton wishlistId={target.wishlistId} />}
+
       <AddFab target={target} />
     </div>
+  );
+}
+
+// Au-dessus du FAB "+", uniquement sur une wishlist (jamais sur la
+// collection, qui ne se supprime pas). Supprime la wishlist entiere (et son
+// contenu, cascade DB) puis retourne a la collection, seul endroit stable
+// une fois la wishlist courante disparue.
+function DeleteWishlistButton({ wishlistId }: { wishlistId: number }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
+  function handleDelete() {
+    if (!confirm("Supprimer cette wishlist et tout son contenu ?")) return;
+    startTransition(async () => {
+      await deleteWishlistAction(wishlistId);
+      router.push("/library/collection");
+    });
+  }
+
+  return (
+    <Button
+      variant="destructive"
+      size="icon"
+      disabled={pending}
+      onClick={handleDelete}
+      aria-label="Supprimer la wishlist"
+      className="fixed bottom-44 right-4 z-30 size-12 rounded-full shadow-lg"
+    >
+      <Trash2 />
+    </Button>
   );
 }
