@@ -50,7 +50,7 @@ export function PerfumeDetailSheet({
 }) {
   return (
     <Sheet open={perfume !== null} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="flex h-[80vh] flex-col overflow-hidden rounded-t-2xl">
+      <SheetContent side="bottom" className="top-16 flex flex-col overflow-hidden rounded-t-2xl">
         {perfume && context && <DetailBody perfume={perfume} context={context} onClose={() => onOpenChange(false)} />}
       </SheetContent>
     </Sheet>
@@ -103,9 +103,10 @@ function DetailBody({
   return (
     <>
       <SheetHeader className="items-center text-center">
-        <div className="relative mb-2 h-40 w-32 overflow-hidden rounded-lg bg-muted">
+        <div className="relative mb-2 h-40 w-32 shrink-0 overflow-hidden rounded-lg bg-muted">
           {perfume.imageUrl ? (
-            <Image src={perfume.imageUrl} alt={perfume.name} fill sizes="200px" className="object-cover" />
+            // object-contain : l'image du parfum doit toujours etre visible en entier, jamais recadree.
+            <Image src={perfume.imageUrl} alt={perfume.name} fill sizes="200px" className="object-contain" />
           ) : (
             <div className="flex size-full items-center justify-center text-muted-foreground">
               <Droplet className="size-10" />

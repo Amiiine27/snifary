@@ -2,13 +2,14 @@ import { requireUser } from "@/lib/session";
 import { AvatarUploader } from "@/components/avatar-uploader";
 import { ProfileForm } from "@/components/profile-form";
 import { AccountActions } from "@/components/account-actions";
+import { BrandHeader } from "@/components/brand-header";
 
 export default async function ProfilePage() {
   const user = await requireUser();
 
   return (
-    <div className="flex flex-col gap-8 px-4 pt-8">
-      <h1 className="text-center font-heading text-3xl">Snifary</h1>
+    <div className="flex flex-col gap-8 px-4 pt-6">
+      <BrandHeader />
 
       <AvatarUploader name={user.name} image={user.image ?? null} />
 

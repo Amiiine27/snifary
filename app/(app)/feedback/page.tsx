@@ -1,14 +1,15 @@
 import { requireUser } from "@/lib/session";
 import { FeedbackForm } from "@/components/feedback-form";
+import { BrandHeader } from "@/components/brand-header";
 
 export default async function FeedbackPage() {
   const user = await requireUser();
 
   return (
-    <div className="flex flex-col gap-6 px-4 pt-8">
+    <div className="flex flex-col gap-6 px-4 pt-6">
       <div>
-        <h1 className="font-heading text-3xl">Snifary</h1>
-        <p className="text-base text-muted-foreground">Ton avis compte !</p>
+        <BrandHeader />
+        <p className="mt-1 text-center text-base text-muted-foreground">Ton avis compte !</p>
       </div>
 
       <p className="text-sm text-muted-foreground">
