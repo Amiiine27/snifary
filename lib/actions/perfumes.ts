@@ -8,23 +8,25 @@ import { searchFragrantica, scrapeFragranticaPerfume, type ScrapedPerfume } from
 import { uploadImageFromUrl } from "@/lib/cloudinary";
 import { findPerfumesByName, findPerfumeByFragranticaUrl } from "@/lib/perfumes";
 
-export type SearchResult = {
-  inLibrary: Awaited<ReturnType<typeof findPerfumesByName>>;
-  onFragrantica: { url: string; title: string }[];
-};
-
-// Etape 1 : l'utilisateur tape un nom. On regarde d'abord ce qu'on a deja en
-// cache (table perfumes), puis on propose des fiches Fragrantica non encore
-// scrapees pour le reste.
-export async function searchPerfumeAction(query: string): Promise<SearchResult> {
+// Etape 1a : recherche locale (cache Turso), quasi instantanee. Separee de la
+// recherche Fragrantica pour que l'utilisateur voie ces resultats tout de
+// suite sans attendre la requete reseau, plus lente et moins fiable.
+export async function searchLocalPerfumesAction(query: string) {
   await requireUser();
   const trimmed = query.trim();
-  if (trimmed.length < 2) return { inLibrary: [], onFragrantica: [] };
+  if (trimmed.length < 2) return [];
+  return findPerfumesByName(trimmed);
+}
 
-  const [inLibrary, candidates] = await Promise.all([
-    findPerfumesByName(trimmed),
-    searchFragrantica(trimmed),
-  ]);
+// Etape 1b : propose des fiches Fragrantica non encore connues. Isolee dans
+// sa propre action pour qu'un echec ou une lenteur reseau n'empeche pas
+// d'afficher les resultats locaux.
+export async function searchFragranticaCandidatesAction(query: string) {
+  await requireUser();
+  const trimmed = query.trim();
+  if (trimmed.length < 2) return [];
+
+  const candidates = await searchFragrantica(trimmed);
 
   const knownUrls = new Set(
     (await Promise.all(candidates.map((c) => findPerfumeByFragranticaUrl(c.url))))
@@ -32,10 +34,7 @@ export async function searchPerfumeAction(query: string): Promise<SearchResult> 
       .map((p) => p!.fragranticaUrl)
   );
 
-  return {
-    inLibrary,
-    onFragrantica: candidates.filter((c) => !knownUrls.has(c.url)),
-  };
+  return candidates.filter((c) => !knownUrls.has(c.url));
 }
 
 // Etape 2 : l'utilisateur choisit une fiche Fragrantica precise. Cache hit ->

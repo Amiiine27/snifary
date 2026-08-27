@@ -2,13 +2,18 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Plus, Search, Loader2 } from "lucide-react";
+import { Plus, Search, Loader2, AlertCircle } from "lucide-react";
 import type { ScrapedPerfume } from "@/lib/fragrantica";
-import type { SearchResult } from "@/lib/actions/perfumes";
-import { searchPerfumeAction, resolvePerfumeAction, savePerfumeAction } from "@/lib/actions/perfumes";
+import type { PerfumeCard as PerfumeCardData } from "@/lib/perfumes";
+import {
+  searchLocalPerfumesAction,
+  searchFragranticaCandidatesAction,
+  resolvePerfumeAction,
+  savePerfumeAction,
+} from "@/lib/actions/perfumes";
 import { addToCollectionAction } from "@/lib/actions/collection";
 import { addItemToWishlistAction } from "@/lib/actions/wishlists";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +27,7 @@ import {
 } from "@/components/ui/select";
 
 type Target = { kind: "collection" } | { kind: "wishlist"; wishlistId: number };
+type FragranticaCandidate = { url: string; title: string };
 
 const TAG_OPTIONS = [
   { value: "printemps", label: "Printemps" },
@@ -35,30 +41,73 @@ const TAG_OPTIONS = [
 export function AddPerfumeSheet({ target }: { target: Target }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SearchResult | null>(null);
-  const [searching, setSearching] = useState(false);
+
+  const [localResults, setLocalResults] = useState<PerfumeCardData[] | null>(null);
+  const [localSearching, setLocalSearching] = useState(false);
+
+  const [remoteResults, setRemoteResults] = useState<FragranticaCandidate[] | null>(null);
+  const [remoteSearching, setRemoteSearching] = useState(false);
+  const [remoteError, setRemoteError] = useState<string | null>(null);
+
   const [draft, setDraft] = useState<ScrapedPerfume | null>(null);
   const [pending, startTransition] = useTransition();
 
   const queryTooShort = query.trim().length < 2;
 
+  // Recherche locale : quasi instantanee, jamais bloquee par le reseau.
   useEffect(() => {
     if (!open || queryTooShort) return;
+    let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- etat de chargement du debounce, pattern recherche standard
-    setSearching(true);
+    setLocalSearching(true);
     const timeout = setTimeout(async () => {
-      const res = await searchPerfumeAction(query);
-      setResults(res);
-      setSearching(false);
-    }, 400);
-    return () => clearTimeout(timeout);
+      try {
+        const res = await searchLocalPerfumesAction(query);
+        if (!cancelled) setLocalResults(res);
+      } catch {
+        if (!cancelled) setLocalResults([]);
+      } finally {
+        if (!cancelled) setLocalSearching(false);
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
   }, [query, open, queryTooShort]);
 
-  const displayResults = queryTooShort ? null : results;
+  // Recherche Fragrantica : plus lente et moins fiable (reseau externe), a
+  // part pour ne jamais bloquer l'affichage des resultats locaux ci-dessus.
+  useEffect(() => {
+    if (!open || queryTooShort) return;
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- etat de chargement du debounce, pattern recherche standard
+    setRemoteSearching(true);
+    setRemoteError(null);
+    const timeout = setTimeout(async () => {
+      try {
+        const res = await searchFragranticaCandidatesAction(query);
+        if (!cancelled) setRemoteResults(res);
+      } catch {
+        if (!cancelled) {
+          setRemoteResults(null);
+          setRemoteError("Recherche Fragrantica indisponible pour le moment.");
+        }
+      } finally {
+        if (!cancelled) setRemoteSearching(false);
+      }
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [query, open, queryTooShort]);
 
   function reset() {
     setQuery("");
-    setResults(null);
+    setLocalResults(null);
+    setRemoteResults(null);
+    setRemoteError(null);
     setDraft(null);
   }
 
@@ -72,26 +121,42 @@ export function AddPerfumeSheet({ target }: { target: Target }) {
 
   function handlePickExisting(perfumeId: number) {
     startTransition(async () => {
-      await addPerfumeIdToTarget(perfumeId);
-      toast.success("Ajoute");
-      setOpen(false);
-      reset();
+      try {
+        await addPerfumeIdToTarget(perfumeId);
+        toast.success("Ajoute");
+        setOpen(false);
+        reset();
+      } catch {
+        toast.error("Impossible d'ajouter ce parfum");
+      }
     });
   }
 
   function handlePickCandidate(url: string) {
     startTransition(async () => {
-      const result = await resolvePerfumeAction(url);
-      if ("existingId" in result) {
-        await addPerfumeIdToTarget(result.existingId);
-        toast.success("Ajoute");
-        setOpen(false);
-        reset();
-      } else {
-        setDraft(result.draft);
+      try {
+        const result = await resolvePerfumeAction(url);
+        if ("existingId" in result) {
+          await addPerfumeIdToTarget(result.existingId);
+          toast.success("Ajoute");
+          setOpen(false);
+          reset();
+        } else {
+          setDraft(result.draft);
+        }
+      } catch {
+        toast.error("Impossible de recuperer cette fiche Fragrantica");
       }
     });
   }
+
+  const noResultsAtAll =
+    !queryTooShort &&
+    !localSearching &&
+    !remoteSearching &&
+    (localResults?.length ?? 0) === 0 &&
+    (remoteResults?.length ?? 0) === 0 &&
+    !remoteError;
 
   return (
     <>
@@ -103,20 +168,20 @@ export function AddPerfumeSheet({ target }: { target: Target }) {
         <Plus />
       </Button>
 
-      <Sheet
+      <Dialog
         open={open}
         onOpenChange={(v) => {
           setOpen(v);
           if (!v) reset();
         }}
       >
-        <SheetContent side="bottom" className="h-[85vh] overflow-y-auto rounded-t-2xl">
-          <SheetHeader>
-            <SheetTitle>{draft ? "Confirme les infos" : "Ajouter un parfum"}</SheetTitle>
-          </SheetHeader>
+        <DialogContent className="flex max-h-[85vh] w-[calc(100%-2rem)] max-w-md flex-col overflow-hidden sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl">{draft ? "Confirme les infos" : "Ajouter un parfum"}</DialogTitle>
+          </DialogHeader>
 
           {!draft ? (
-            <div className="flex flex-col gap-4 px-4 pb-4">
+            <div className="flex flex-col gap-4 overflow-y-auto">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -128,15 +193,9 @@ export function AddPerfumeSheet({ target }: { target: Target }) {
                 />
               </div>
 
-              {searching && (
-                <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin" /> Recherche...
-                </p>
-              )}
-
-              {displayResults && displayResults.inLibrary.length > 0 && (
+              {localResults && localResults.length > 0 && (
                 <ResultGroup title="Deja dans Snifary">
-                  {displayResults.inLibrary.map((p) => (
+                  {localResults.map((p) => (
                     <ResultRow
                       key={p.id}
                       title={p.name}
@@ -148,42 +207,56 @@ export function AddPerfumeSheet({ target }: { target: Target }) {
                 </ResultGroup>
               )}
 
-              {displayResults && displayResults.onFragrantica.length > 0 && (
-                <ResultGroup title="Sur Fragrantica">
-                  {displayResults.onFragrantica.map((c) => (
-                    <ResultRow
-                      key={c.url}
-                      title={c.title}
-                      disabled={pending}
-                      onClick={() => handlePickCandidate(c.url)}
-                    />
-                  ))}
-                </ResultGroup>
-              )}
+              <ResultGroup title="Sur Fragrantica">
+                {remoteSearching && (
+                  <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin" /> Recherche...
+                  </p>
+                )}
+                {remoteError && (
+                  <p className="flex items-center gap-2 text-sm text-destructive">
+                    <AlertCircle className="size-4" /> {remoteError}
+                  </p>
+                )}
+                {remoteResults?.map((c) => (
+                  <ResultRow
+                    key={c.url}
+                    title={c.title}
+                    disabled={pending}
+                    onClick={() => handlePickCandidate(c.url)}
+                  />
+                ))}
+                {remoteResults?.length === 0 && !remoteSearching && !remoteError && (
+                  <p className="text-sm text-muted-foreground">Aucun resultat</p>
+                )}
+              </ResultGroup>
 
-              {displayResults &&
-                displayResults.inLibrary.length === 0 &&
-                displayResults.onFragrantica.length === 0 &&
-                !searching && <p className="text-sm text-muted-foreground">Aucun resultat</p>}
+              {noResultsAtAll && <p className="text-sm text-muted-foreground">Aucun resultat</p>}
             </div>
           ) : (
-            <ConfirmForm
-              draft={draft}
-              pending={pending}
-              onCancel={() => setDraft(null)}
-              onConfirm={(values) => {
-                startTransition(async () => {
-                  const perfumeId = await savePerfumeAction({ draft, ...values });
-                  await addPerfumeIdToTarget(perfumeId);
-                  toast.success("Parfum ajoute");
-                  setOpen(false);
-                  reset();
-                });
-              }}
-            />
+            <div className="overflow-y-auto">
+              <ConfirmForm
+                draft={draft}
+                pending={pending}
+                onCancel={() => setDraft(null)}
+                onConfirm={(values) => {
+                  startTransition(async () => {
+                    try {
+                      const perfumeId = await savePerfumeAction({ draft, ...values });
+                      await addPerfumeIdToTarget(perfumeId);
+                      toast.success("Parfum ajoute");
+                      setOpen(false);
+                      reset();
+                    } catch {
+                      toast.error("Impossible d'enregistrer ce parfum");
+                    }
+                  });
+                }}
+              />
+            </div>
           )}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -251,7 +324,7 @@ function ConfirmForm({
   );
 
   return (
-    <div className="flex flex-col gap-4 px-4 pb-4">
+    <div className="flex flex-col gap-4">
       <div>
         <p className="font-medium">{draft.name}</p>
         <p className="text-sm text-muted-foreground">{draft.brand}</p>

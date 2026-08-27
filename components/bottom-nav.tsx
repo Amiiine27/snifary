@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Lightbulb, BarChart3, Home, Heart, User } from "lucide-react";
+import { Lightbulb, Library, Home, Heart, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
   { href: "/feedback", icon: Lightbulb, label: "Avis", match: (p: string) => p.startsWith("/feedback") },
-  { href: "/stats", icon: BarChart3, label: "Stats", match: (p: string) => p.startsWith("/stats") },
+  { href: "/stats", icon: Library, label: "Collection", match: (p: string) => p.startsWith("/stats") },
   { href: "/", icon: Home, label: "Accueil", match: (p: string) => p === "/" },
   {
     href: "/wishlists",

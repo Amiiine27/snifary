@@ -18,6 +18,18 @@ import * as cheerio from "cheerio";
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36";
 
+// DuckDuckGo/Fragrantica peuvent etre lents ou bloquer un serveur (IP
+// datacenter Vercel) sans jamais repondre : on borne chaque requete pour
+// echouer proprement plutot que de bloquer indefiniment la recherche.
+const FETCH_TIMEOUT_MS = 6000;
+
+function fetchWithTimeout(url: string | URL) {
+  return fetch(url, {
+    headers: { "User-Agent": USER_AGENT },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+}
+
 export type FragranticaCandidate = {
   url: string;
   title: string;
@@ -40,9 +52,7 @@ export async function searchFragrantica(query: string): Promise<FragranticaCandi
   const searchUrl = new URL("https://html.duckduckgo.com/html/");
   searchUrl.searchParams.set("q", `site:fragrantica.com/perfume ${query}`);
 
-  const res = await fetch(searchUrl, {
-    headers: { "User-Agent": USER_AGENT },
-  });
+  const res = await fetchWithTimeout(searchUrl);
   if (!res.ok) throw new Error(`Recherche echouee (${res.status})`);
 
   const html = await res.text();
@@ -74,9 +84,7 @@ function extractRealUrl(href: string): string | null {
 }
 
 export async function scrapeFragranticaPerfume(fragranticaUrl: string): Promise<ScrapedPerfume> {
-  const res = await fetch(fragranticaUrl, {
-    headers: { "User-Agent": USER_AGENT },
-  });
+  const res = await fetchWithTimeout(fragranticaUrl);
   if (!res.ok) throw new Error(`Fiche introuvable (${res.status})`);
 
   const html = await res.text();
