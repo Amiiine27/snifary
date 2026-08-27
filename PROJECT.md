@@ -12,8 +12,9 @@
 ## Vue d'ensemble
 
 Snifary = bibliotheque de parfums personnelle, multi-utilisateurs, mobile-first
-(coque `max-w-md` centree, pensee pour etre installee comme une PWA sur
-telephone). Chaque utilisateur gere : une **collection** (parfums possedes) et
+(coque centree, pensee pour etre installee comme une PWA sur telephone —
+mais responsive : la coque s'elargit par palier sur tablette/PC, voir section
+UI). Chaque utilisateur gere : une **collection** (parfums possedes) et
 plusieurs **wishlists** nommees (listes de souhaits). Les fiches parfum
 (nom/marque/image/notes) viennent soit d'un scraping Fragrantica a la demande,
 soit d'une saisie manuelle. Projet perso, echelle "quelques utilisateurs" —
@@ -648,8 +649,54 @@ projet). Si ce compte change un jour, modifier cette seule constante.
 
 ## UI / conventions a respecter
 
-- **Coque mobile** : tout est contraint a `max-w-md`, y compris le layout
-  `(app)` et l'`AppTopBar`.
+- **Coque responsive** : mobile-first (`max-w-md`), mais plus figee a cette
+  seule largeur — la coque s'elargit par palier sur tablette/PC (`sm:max-w-2xl
+  lg:max-w-4xl`, breakpoints Tailwind par defaut : `sm` 640px, `lg` 1024px).
+  **Un seul et meme triplet de classes** `max-w-md sm:max-w-2xl lg:max-w-4xl`
+  est repete a l'identique partout ou la largeur de la coque compte : le
+  layout `(app)/layout.tsx` (leve automatiquement la largeur de `<main>` et
+  de toutes les pages qu'il contient), et separement `AppTopBar` et
+  `BottomNav` (leur propre wrapper interne `mx-auto`, necessaire car ce sont
+  des elements `fixed` — la largeur de leur parent DOM ne les contraint pas,
+  `position: fixed` se positionne par rapport au viewport, pas au parent).
+  Si ce triplet doit changer, le mettre a jour aux 3 endroits. **Pas de
+  sidebar ni de nav desktop dediee** : la bottom nav reste utilisee a toutes
+  les tailles (deliberement, pour ne pas dupliquer la logique de navigation
+  sur un second paradigme d'UI — coherent avec le reste du projet).
+  Consequence directe sur les elements `fixed` positionnes par rapport au
+  bord de l'ecran (`AddFab`, `DeleteWishlistButton`) : `right-4` seul ne
+  suffit plus, puisque la coque n'occupe plus tout le viewport sur
+  tablette/PC — voir plus bas.
+- **Elements `fixed` ancres a la coque, pas au viewport** : `AddFab`
+  (`components/add-fab.tsx`, ses deux variantes) et `DeleteWishlistButton`
+  (`components/library-section-view.tsx`) utilisent le meme patron : une
+  bande `fixed inset-x-0` pleine largeur (a la bonne hauteur, `pointer-events-none`
+  pour ne pas bloquer les clics sur le vide de part et d'autre sur grand
+  ecran), contenant une colonne `mx-auto w-full max-w-md sm:max-w-2xl
+  lg:max-w-4xl` (le meme triplet que la coque) avec `justify-end` et
+  `pointer-events-auto` sur le bouton lui-meme. Le bouton reste ainsi
+  toujours cale sur le bord droit de la coque, jamais sur celui du viewport —
+  sans ca, sur un grand ecran, le bouton se serait retrouve tres loin a
+  droite du contenu reellement affiche (centre, coque etroite au milieu d'un
+  large ecran). A reappliquer pour tout futur element `fixed` positionne par
+  rapport a un bord d'ecran.
+- **Sheets bas (`components/ui/sheet.tsx`, `data-[side=bottom]`)** : sans
+  largeur max native (`inset-x-0` seul, contrairement aux sheets lateraux qui
+  ont deja `sm:max-w-sm`), une sheet du bas s'etirerait bord a bord sur tout
+  le viewport en tablette/PC — incoherent avec le reste de la coque, qui
+  reste centree. Corrige directement dans le composant partage (pas par
+  appel) : a partir de `sm`, `inset-x-auto` + `left-1/2` + `-translate-x-1/2`
+  + `w-full max-w-2xl` (`lg:max-w-4xl`) recentre la sheet en gardant le meme
+  triplet de largeurs que le reste de l'app, avec des bordures laterales
+  (`sm:border-x`) puisqu'elle ne touche plus les bords de l'ecran.
+- **Grilles de parfums** : `grid-cols-3` (collection/wishlist, skeleton de
+  chargement) et `grid-cols-2` (apercus accueil, Decouvrir, filtres) gagnent
+  des colonnes en plus par palier (`sm:`/`lg:`) plutot que de rester figes —
+  ex. `grid-cols-3 sm:grid-cols-4 lg:grid-cols-5` pour la grille principale.
+  Pas de logique commune extraite (pas de constante partagee) : chaque grille
+  a son propre nombre d'elements a afficher et son propre bon nombre de
+  colonnes cible, l'usine a gaz d'une config centralisee n'apporterait rien
+  ici.
 - **AppTopBar vs BrandHeader** : ce sont deux composants distincts qui font un
   logo similaire mais dans des contextes differents. `AppTopBar`
   (`components/app-top-bar.tsx`) = persistant sur toutes les pages `(app)`,

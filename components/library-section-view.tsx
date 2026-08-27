@@ -128,7 +128,7 @@ export function LibrarySectionView({
             : "Aucun parfum ne correspond a ces filtres."}
         </p>
       ) : (
-        <div className={view === "grid" ? "grid grid-cols-3 gap-3" : "flex flex-col gap-2.5"}>
+        <div className={view === "grid" ? "grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5" : "flex flex-col gap-2.5"}>
           {filtered.map((item) => (
             <PerfumeCard
               key={item.itemId}
@@ -187,15 +187,19 @@ function DeleteWishlistButton({ wishlistId }: { wishlistId: number }) {
   }
 
   return (
-    <Button
-      variant="destructive"
-      size="icon"
-      disabled={pending}
-      onClick={handleDelete}
-      aria-label="Supprimer la wishlist"
-      className="fixed bottom-44 right-4 z-30 size-12 rounded-full shadow-lg"
-    >
-      <Trash2 />
-    </Button>
+    <div className="pointer-events-none fixed inset-x-0 bottom-44 z-30 flex justify-center">
+      <div className="flex w-full max-w-md justify-end px-4 sm:max-w-2xl lg:max-w-4xl">
+        <Button
+          variant="destructive"
+          size="icon"
+          disabled={pending}
+          onClick={handleDelete}
+          aria-label="Supprimer la wishlist"
+          className="pointer-events-auto size-12 rounded-full shadow-lg"
+        >
+          <Trash2 />
+        </Button>
+      </div>
+    </div>
   );
 }

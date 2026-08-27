@@ -41,7 +41,7 @@ export function SectionPreview({
           Rien ici pour l&apos;instant
         </Link>
       ) : (
-        <Link href={href} className="grid grid-cols-2 gap-3">
+        <Link href={href} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {preview.map((p) => (
             <div key={p.id} className="flex flex-col gap-1.5">
               <div className="relative aspect-square overflow-hidden rounded-xl bg-muted">

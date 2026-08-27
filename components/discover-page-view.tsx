@@ -120,7 +120,7 @@ export function DiscoverPageView({
           {isSearchMode ? "Aucun resultat." : "Aucune suggestion pour ce filtre."}
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {filtered.map((p) => (
             <button
               key={p.fragranticaUrl}

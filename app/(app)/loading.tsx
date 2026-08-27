@@ -8,8 +8,8 @@ export default function AppLoading() {
   return (
     <div className="flex flex-col gap-5 px-4 pt-8">
       <Skeleton className="h-8 w-40" />
-      <div className="grid grid-cols-3 gap-3">
-        {Array.from({ length: 9 }).map((_, i) => (
+      <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+        {Array.from({ length: 10 }).map((_, i) => (
           <Skeleton key={i} className="aspect-square rounded-xl" />
         ))}
       </div>

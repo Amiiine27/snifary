@@ -90,7 +90,7 @@ export function FiltersSheet({
 
             <div className="space-y-2">
               <Label>Categories</Label>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {TAG_OPTIONS.map((tag) => (
                   <label key={tag.value} className="flex items-center gap-2 text-sm">
                     <Checkbox

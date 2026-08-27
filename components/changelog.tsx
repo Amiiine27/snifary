@@ -2,6 +2,13 @@
 // Version la plus recente en premier.
 const CHANGELOG: { version: string; changes: string[] }[] = [
   {
+    version: "1.19",
+    changes: [
+      "App responsive sur tablette et PC : la coque, les grilles et les menus s'adaptent a l'ecran",
+      "Le bouton + et les sheets restent bien alignes avec le contenu, meme sur grand ecran",
+    ],
+  },
+  {
     version: "1.18",
     changes: [
       "Meme affichage pour la collection et les wishlists : seuls le nom, les parfums et les chips changent",

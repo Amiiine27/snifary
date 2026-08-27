@@ -23,13 +23,22 @@ function SimpleAddFab({ target }: { target: Target }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button
-        className="fixed bottom-24 right-4 z-30 size-16 rounded-full shadow-lg [&_svg:not([class*='size-'])]:size-7"
-        onClick={() => setOpen(true)}
-        aria-label="Ajouter un parfum"
-      >
-        <Plus />
-      </Button>
+      {/* Bande fixe pleine largeur contenant une colonne bornee a la meme
+          largeur que le shell (voir app/(app)/layout.tsx) : sur tablette/PC,
+          le shell s'elargit mais reste centre, donc le FAB doit suivre son
+          bord droit plutot que celui du viewport (`right-4` seul collerait
+          le bouton loin du contenu sur un grand ecran). */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 flex justify-center">
+        <div className="flex w-full max-w-md justify-end px-4 sm:max-w-2xl lg:max-w-4xl">
+          <Button
+            className="pointer-events-auto size-16 rounded-full shadow-lg [&_svg:not([class*='size-'])]:size-7"
+            onClick={() => setOpen(true)}
+            aria-label="Ajouter un parfum"
+          >
+            <Plus />
+          </Button>
+        </div>
+      </div>
       <AddPerfumeDialog target={target} open={open} onOpenChange={setOpen} />
     </>
   );
@@ -52,39 +61,44 @@ function ExpandableAddFab({ target }: { target: Target }) {
         />
       )}
 
-      <div className="fixed bottom-24 right-4 z-30 flex flex-col items-end gap-3">
-        <div
-          className={cn(
-            "flex flex-col items-end gap-3 transition-all duration-150",
-            expanded ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"
-          )}
-        >
-          <FabOption
-            label="Nouvelle wishlist"
-            icon={ListPlus}
-            onClick={() => {
-              setExpanded(false);
-              setShowNewWishlist(true);
-            }}
-          />
-          <FabOption
-            label="Ajouter un parfum"
-            icon={Droplet}
-            onClick={() => {
-              setExpanded(false);
-              setShowAddPerfume(true);
-            }}
-          />
-        </div>
+      {/* Meme technique que SimpleAddFab : bande fixe pleine largeur, colonne
+          bornee a la largeur du shell, bouton (et ses options) ancres a son
+          bord droit plutot qu'a celui du viewport. */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 flex justify-center">
+        <div className="flex w-full max-w-md flex-col items-end gap-3 px-4 sm:max-w-2xl lg:max-w-4xl">
+          <div
+            className={cn(
+              "pointer-events-auto flex flex-col items-end gap-3 transition-all duration-150",
+              expanded ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-2 opacity-0"
+            )}
+          >
+            <FabOption
+              label="Nouvelle wishlist"
+              icon={ListPlus}
+              onClick={() => {
+                setExpanded(false);
+                setShowNewWishlist(true);
+              }}
+            />
+            <FabOption
+              label="Ajouter un parfum"
+              icon={Droplet}
+              onClick={() => {
+                setExpanded(false);
+                setShowAddPerfume(true);
+              }}
+            />
+          </div>
 
-        <Button
-          className="size-16 rounded-full shadow-lg [&_svg:not([class*='size-'])]:size-7"
-          onClick={() => setExpanded((v) => !v)}
-          aria-label={expanded ? "Fermer" : "Ajouter"}
-          aria-expanded={expanded}
-        >
-          {expanded ? <X /> : <Plus />}
-        </Button>
+          <Button
+            className="pointer-events-auto size-16 rounded-full shadow-lg [&_svg:not([class*='size-'])]:size-7"
+            onClick={() => setExpanded((v) => !v)}
+            aria-label={expanded ? "Fermer" : "Ajouter"}
+            aria-expanded={expanded}
+          >
+            {expanded ? <X /> : <Plus />}
+          </Button>
+        </div>
       </div>
 
       <AddPerfumeDialog target={target} open={showAddPerfume} onOpenChange={setShowAddPerfume} />

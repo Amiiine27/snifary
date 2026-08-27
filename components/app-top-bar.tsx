@@ -20,7 +20,7 @@ export async function AppTopBar() {
 
   return (
     <header className="fixed inset-x-0 top-0 z-40">
-      <div className="mx-auto grid max-w-md grid-cols-[2.5rem_1fr_2.5rem] items-start gap-2 px-3 pt-4">
+      <div className="mx-auto grid max-w-md grid-cols-[2.5rem_1fr_2.5rem] items-start gap-2 px-3 pt-4 sm:max-w-2xl lg:max-w-4xl">
         {admin ? (
           <Link
             href="/admin/feedback"

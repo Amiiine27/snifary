@@ -18,7 +18,7 @@ export function BottomNav() {
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-popover/95 backdrop-blur supports-backdrop-filter:bg-popover/80">
-      <ul className="mx-auto flex max-w-md items-stretch justify-between px-2">
+      <ul className="mx-auto flex max-w-md items-stretch justify-between px-2 sm:max-w-2xl lg:max-w-4xl">
         {items.map(({ href, icon: Icon, label, match }) => {
           const active = match(pathname);
           return (
