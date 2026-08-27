@@ -12,10 +12,11 @@ export default async function HomePage() {
     getUserGenderPreference(user.id),
   ]);
   const discoverPerfumes = await getDiscoverPerfumes(user.id, genderPreference);
+  const wishlists = sections.filter((s) => s.kind === "wishlist").map((s) => ({ id: s.id, name: s.name }));
 
   return (
     <div className="flex flex-col gap-8 px-4 pb-6">
-      <DiscoverSection perfumes={discoverPerfumes} />
+      <DiscoverSection perfumes={discoverPerfumes} wishlists={wishlists} />
 
       {sections.map((section) => (
         <SectionPreview

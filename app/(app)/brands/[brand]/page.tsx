@@ -1,12 +1,14 @@
 import { requireUser } from "@/lib/session";
-import { getBrandCatalog } from "@/lib/perfumes";
+import { getBrandCatalog, listWishlists } from "@/lib/perfumes";
 import { BrandCatalogView } from "@/components/brand-catalog-view";
 
 export default async function BrandPage({ params }: { params: Promise<{ brand: string }> }) {
-  await requireUser();
+  const user = await requireUser();
   const { brand: encoded } = await params;
   const brand = decodeURIComponent(encoded);
-  const perfumes = await getBrandCatalog(brand);
 
-  return <BrandCatalogView brand={brand} perfumes={perfumes} />;
+  const [perfumes, wishlistRows] = await Promise.all([getBrandCatalog(brand), listWishlists(user.id)]);
+  const wishlists = wishlistRows.map((w) => ({ id: w.id, name: w.name }));
+
+  return <BrandCatalogView brand={brand} perfumes={perfumes} wishlists={wishlists} />;
 }

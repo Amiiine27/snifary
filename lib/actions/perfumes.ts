@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { perfumes, notes, perfumeNotes, perfumeTags, collectionItems } from "@/db/schema";
 import { guessConcentration } from "@/lib/concentration";
+import { splitNotesList } from "@/lib/notes";
 import { requireUser } from "@/lib/session";
 import {
   searchFragrantica,
@@ -20,6 +21,7 @@ import {
   searchFragranticaReference,
   findReferenceByUrl,
 } from "@/lib/perfumes";
+import { addItemToWishlistAction } from "@/lib/actions/wishlists";
 
 type Gender = "homme" | "femme" | "unisexe";
 type Concentration = "edt" | "edp" | "parfum" | "extrait" | "cologne" | null;
@@ -103,14 +105,6 @@ export async function resolvePerfumeAction(
   return { draft };
 }
 
-function splitNotesList(value: string | null): string[] {
-  if (!value) return [];
-  return value
-    .split(",")
-    .map((n) => n.trim())
-    .filter(Boolean);
-}
-
 export type SavePerfumeInput = {
   draft: ScrapedPerfume;
   price: number | null;
@@ -156,46 +150,114 @@ export async function savePerfumeAction(input: SavePerfumeInput): Promise<number
   });
 }
 
-// Ajout direct a la collection depuis une source qui n'a pas de notion de
-// "target" (collection ou wishlist precise) comme AddPerfumeDialog -- la
-// section Decouvrir de l'accueil et les pages marque, toutes deux issues du
-// meme dataset local (fragrantica_reference). Compose resolve + save + ajout
-// collection en un seul aller-retour serveur plutot que trois actions
-// separees cote client.
-export async function quickAddToCollectionAction(fragranticaUrl: string): Promise<void> {
-  const user = await requireUser();
-
+// Resout (dataset local, jamais de scraping ici) puis ecrit un parfum issu
+// de Decouvrir ou d'une page marque -- meme dataset que la recherche, mais
+// pas de brouillon a confirmer/annuler comme resolvePerfumeAction : ces deux
+// ecrans montrent deja la fiche complete avant d'appeler cette fonction (voir
+// ReferencePerfumeSheet), donc resolution et ecriture sont composees
+// directement. `overrides` porte ce que l'utilisateur a saisi a la main
+// (prix, description) dans ce meme ecran -- prioritaire sur Wikipedia, sans
+// jamais ecraser une valeur existante avec `null` si l'utilisateur laisse le
+// champ vide.
+async function resolveAndSaveReferencePerfume(
+  fragranticaUrl: string,
+  overrides: { price: number | null; description: string | null }
+): Promise<number> {
   const existing = await findPerfumeByFragranticaUrl(fragranticaUrl);
-  let perfumeId: number;
-
   if (existing) {
-    perfumeId = existing.id;
-  } else {
-    const reference = await findReferenceByUrl(fragranticaUrl);
-    if (!reference) throw new Error("Parfum introuvable");
-
-    perfumeId = await savePerfumeAction({
-      draft: {
-        name: reference.name,
-        brand: reference.brand,
-        gender: reference.gender,
-        imageUrl: null,
-        fragranticaUrl: reference.fragranticaUrl,
-        notes: {
-          top: splitNotesList(reference.notesTop),
-          heart: splitNotesList(reference.notesHeart),
-          base: splitNotesList(reference.notesBase),
-        },
-      },
-      price: null,
-      volumeMl: 100,
-      concentration: guessConcentration(reference.name),
-      gender: reference.gender,
-      tags: [],
-    });
+    if (overrides.price != null || overrides.description != null) {
+      await db
+        .update(perfumes)
+        .set({
+          ...(overrides.price != null ? { price: overrides.price } : {}),
+          ...(overrides.description != null ? { description: overrides.description } : {}),
+        })
+        .where(eq(perfumes.id, existing.id));
+    }
+    return existing.id;
   }
 
-  await db.insert(collectionItems).values({ userId: user.id, perfumeId }).onConflictDoNothing();
+  const reference = await findReferenceByUrl(fragranticaUrl);
+  if (!reference) throw new Error("Parfum introuvable");
+
+  const wiki = overrides.description
+    ? { image: null, description: null }
+    : await findWikipediaPerfumeInfo(reference.name).catch(() => ({ image: null, description: null }) as const);
+
+  const imagePublicId = wiki.image ? await uploadImageFromUrl(wiki.image, "perfumes") : null;
+
+  return insertPerfumeRow({
+    name: reference.name,
+    brand: reference.brand,
+    imagePublicId,
+    fragranticaUrl: reference.fragranticaUrl,
+    inspiredBy: null,
+    description: overrides.description ?? wiki.description,
+    price: overrides.price,
+    volumeMl: 100,
+    concentration: guessConcentration(reference.name),
+    gender: reference.gender,
+    tags: [],
+    notes: {
+      top: splitNotesList(reference.notesTop),
+      heart: splitNotesList(reference.notesHeart),
+      base: splitNotesList(reference.notesBase),
+    },
+  });
+}
+
+export type SaveReferencePerfumeInput = {
+  fragranticaUrl: string;
+  price: number | null;
+  description: string | null;
+  toCollection: boolean;
+  wishlistIds: number[];
+};
+
+// Decouvrir et les pages marque n'ont pas de "target" unique comme
+// AddPerfumeDialog (collection OU une wishlist precise) : l'utilisateur voit
+// la fiche complete du parfum d'abord (ReferencePerfumeSheet), puis choisit
+// librement collection et/ou une ou plusieurs wishlists avant d'ecrire quoi
+// que ce soit.
+export async function saveReferencePerfumeAction(input: SaveReferencePerfumeInput): Promise<void> {
+  const user = await requireUser();
+  if (!input.toCollection && input.wishlistIds.length === 0) {
+    throw new Error("Choisis au moins une destination");
+  }
+
+  const perfumeId = await resolveAndSaveReferencePerfume(input.fragranticaUrl, {
+    price: input.price,
+    description: input.description,
+  });
+
+  if (input.toCollection) {
+    await db.insert(collectionItems).values({ userId: user.id, perfumeId }).onConflictDoNothing();
+  }
+  for (const wishlistId of input.wishlistIds) {
+    await addItemToWishlistAction(wishlistId, perfumeId);
+  }
+
+  revalidatePath("/");
+  revalidatePath("/collection");
+}
+
+// Corrige apres coup un prix/une description manquants (ou faux) sur
+// N'IMPORTE quel parfum, pas seulement les fiches manuelles -- `perfumes`
+// est un catalogue commun sans notion de proprietaire (meme acceptation que
+// updateManualPerfumeAction ci-dessous). Ni le dataset local ni Fragrantica
+// n'exposent ces deux champs de facon fiable (voir PROJECT.md), donc une
+// bonne partie des fiches issues de la recherche/Decouvrir en manquent --
+// ce filet de rattrapage est la reponse retenue plutot que d'aller chercher
+// une source de prix qui n'existe pas gratuitement.
+export async function updatePerfumeExtrasAction(
+  perfumeId: number,
+  input: { price: number | null; description: string | null }
+): Promise<void> {
+  await requireUser();
+  await db
+    .update(perfumes)
+    .set({ price: input.price, description: input.description?.trim() || null })
+    .where(eq(perfumes.id, perfumeId));
   revalidatePath("/");
   revalidatePath("/collection");
 }

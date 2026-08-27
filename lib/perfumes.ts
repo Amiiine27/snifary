@@ -13,6 +13,7 @@ import {
   userPreferences,
 } from "@/db/schema";
 import { cloudinaryUrl } from "@/lib/cloudinary";
+import { splitNotesList } from "@/lib/notes";
 
 export type PerfumeCard = {
   id: number;
@@ -128,10 +129,21 @@ export type ReferencePerfume = {
   name: string;
   brand: string;
   gender: "homme" | "femme" | "unisexe";
+  notes: { top: string[]; heart: string[]; base: string[] };
 };
 
 function toReferencePerfume(r: typeof fragranticaReference.$inferSelect): ReferencePerfume {
-  return { fragranticaUrl: r.fragranticaUrl, name: r.name, brand: r.brand, gender: r.gender };
+  return {
+    fragranticaUrl: r.fragranticaUrl,
+    name: r.name,
+    brand: r.brand,
+    gender: r.gender,
+    notes: {
+      top: splitNotesList(r.notesTop),
+      heart: splitNotesList(r.notesHeart),
+      base: splitNotesList(r.notesBase),
+    },
+  };
 }
 
 export async function getUserGenderPreference(userId: string): Promise<"homme" | "femme" | "unisexe"> {

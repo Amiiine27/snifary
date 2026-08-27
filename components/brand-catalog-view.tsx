@@ -1,11 +1,10 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { toast } from "sonner";
-import { ChevronLeft, Search, Plus, Loader2 } from "lucide-react";
+import { ChevronLeft, Search } from "lucide-react";
 import type { ReferencePerfume } from "@/lib/perfumes";
-import { quickAddToCollectionAction } from "@/lib/actions/perfumes";
+import { ReferencePerfumeSheet } from "@/components/reference-perfume-sheet";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -21,12 +20,20 @@ const GENDER_OPTIONS = [
 // Snifary. Tri/filtre volontairement legers (recherche texte + genre) : ces
 // lignes n'ont ni tags ni notes structurees comme un PerfumeDetails possede,
 // donc LibrarySectionView (pense pour des items possedes) n'est pas reutilisable
-// tel quel ici.
-export function BrandCatalogView({ brand, perfumes }: { brand: string; perfumes: ReferencePerfume[] }) {
+// tel quel ici. Tape sur une ligne -> ouvre la fiche complete
+// (ReferencePerfumeSheet), qui laisse choisir collection et/ou wishlist(s).
+export function BrandCatalogView({
+  brand,
+  perfumes,
+  wishlists,
+}: {
+  brand: string;
+  perfumes: ReferencePerfume[];
+  wishlists: { id: number; name: string }[];
+}) {
   const [query, setQuery] = useState("");
   const [gender, setGender] = useState<(typeof GENDER_OPTIONS)[number]["value"]>(null);
-  const [pendingUrl, setPendingUrl] = useState<string | null>(null);
-  const [, startTransition] = useTransition();
+  const [selected, setSelected] = useState<ReferencePerfume | null>(null);
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -36,20 +43,6 @@ export function BrandCatalogView({ brand, perfumes }: { brand: string; perfumes:
       return true;
     });
   }, [perfumes, query, gender]);
-
-  function handleAdd(url: string) {
-    setPendingUrl(url);
-    startTransition(async () => {
-      try {
-        await quickAddToCollectionAction(url);
-        toast.success("Ajoute a ta collection");
-      } catch {
-        toast.error("Impossible d'ajouter ce parfum");
-      } finally {
-        setPendingUrl(null);
-      }
-    });
-  }
 
   return (
     <div className="flex flex-col gap-5 px-4 pt-4">
@@ -95,20 +88,20 @@ export function BrandCatalogView({ brand, perfumes }: { brand: string; perfumes:
           {filtered.map((p) => (
             <button
               key={p.fragranticaUrl}
-              onClick={() => handleAdd(p.fragranticaUrl)}
-              disabled={pendingUrl === p.fragranticaUrl}
-              className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 text-left text-sm transition-colors hover:bg-muted disabled:opacity-50"
+              onClick={() => setSelected(p)}
+              className="rounded-lg border border-border p-3 text-left text-sm font-medium transition-colors hover:bg-muted"
             >
-              <span className="min-w-0 truncate font-medium">{p.name}</span>
-              {pendingUrl === p.fragranticaUrl ? (
-                <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
-              ) : (
-                <Plus className="size-4 shrink-0 text-primary" />
-              )}
+              {p.name}
             </button>
           ))}
         </div>
       )}
+
+      <ReferencePerfumeSheet
+        perfume={selected}
+        wishlists={wishlists}
+        onOpenChange={(open) => !open && setSelected(null)}
+      />
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { Droplet, ShoppingBag, Trash2, Pencil, Sun, Snowflake, Flower2, Leaf, Su
 import type { PerfumeDetails } from "@/lib/perfumes";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { EditPerfumeDialog } from "@/components/edit-perfume-dialog";
 import {
@@ -18,6 +19,7 @@ import {
   moveWishlistItemToCollectionAction,
   removeItemFromWishlistAction,
 } from "@/lib/actions/wishlists";
+import { updatePerfumeExtrasAction } from "@/lib/actions/perfumes";
 
 const TAG_ICON: Record<string, React.ElementType> = {
   printemps: Flower2,
@@ -70,6 +72,8 @@ function DetailBody({
 }) {
   const [pending, startTransition] = useTransition();
   const [note, setNote] = useState(context.kind === "collection" ? context.personalNote ?? "" : "");
+  const [price, setPrice] = useState(perfume.price != null ? String(perfume.price) : "");
+  const [description, setDescription] = useState(perfume.description ?? "");
   const [editOpen, setEditOpen] = useState(false);
   const isManual = perfume.fragranticaUrl === null;
 
@@ -103,6 +107,26 @@ function DetailBody({
   }
 
   const noteChanged = context.kind === "collection" && note !== (context.personalNote ?? "");
+
+  const priceChanged = price !== (perfume.price != null ? String(perfume.price) : "");
+  const descriptionChanged = description !== (perfume.description ?? "");
+  const extrasChanged = priceChanged || descriptionChanged;
+
+  // Ni le dataset local ni Fragrantica n'exposent le prix ou une vraie
+  // description de facon fiable (voir PROJECT.md) -- beaucoup de fiches
+  // issues de la recherche/Decouvrir en manquent. Rattrapable ici pour
+  // N'IMPORTE quel parfum, pas seulement les fiches manuelles (comme
+  // "Modifier" ci-dessous) : `perfumes` est un catalogue commun sans
+  // notion de proprietaire.
+  function handleSaveExtras() {
+    startTransition(async () => {
+      await updatePerfumeExtrasAction(perfume.id, {
+        price: price.trim() ? Number(price) : null,
+        description,
+      });
+      toast.success("Enregistre");
+    });
+  }
 
   return (
     <>
@@ -138,10 +162,6 @@ function DetailBody({
           <p className="text-center text-xs text-muted-foreground">Clone inspire de {perfume.inspiredBy}</p>
         )}
 
-        {perfume.description && (
-          <p className="text-center text-sm text-muted-foreground">{perfume.description}</p>
-        )}
-
         {perfume.tags.length > 0 && (
           <div className="flex flex-wrap justify-center gap-3">
             {perfume.tags.map((tag) => {
@@ -160,6 +180,33 @@ function DetailBody({
           <NotesRow label="Tete" notes={perfume.notes.top} />
           <NotesRow label="Coeur" notes={perfume.notes.heart} />
           <NotesRow label="Fond" notes={perfume.notes.base} />
+        </div>
+
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground">Prix (&euro;)</label>
+            <Input
+              type="number"
+              inputMode="decimal"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              placeholder="Non renseigne"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground">Description</label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Aucune description pour l'instant"
+              rows={3}
+            />
+          </div>
+          {extrasChanged && (
+            <Button size="sm" onClick={handleSaveExtras} disabled={pending}>
+              Enregistrer
+            </Button>
+          )}
         </div>
 
         {context.kind === "collection" && (
@@ -201,7 +248,7 @@ function DetailBody({
   );
 }
 
-function NotesRow({ label, notes }: { label: string; notes: string[] }) {
+export function NotesRow({ label, notes }: { label: string; notes: string[] }) {
   if (notes.length === 0) return null;
   return (
     <div>

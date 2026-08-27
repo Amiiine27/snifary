@@ -1,32 +1,27 @@
 "use client";
 
-import { useTransition } from "react";
-import { toast } from "sonner";
-import { Droplet, Plus, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { Droplet } from "lucide-react";
 import type { ReferencePerfume } from "@/lib/perfumes";
-import { quickAddToCollectionAction } from "@/lib/actions/perfumes";
+import { ReferencePerfumeSheet } from "@/components/reference-perfume-sheet";
 
 // Section "Decouvrir" de l'accueil : tirage aleatoire dans le dataset local
 // (fragrantica_reference, ~24k parfums), filtre par la preference de genre
 // du profil. Jamais d'image (le dataset n'en a pas) -- carte compacte plutot
 // que le grid a vignettes utilise ailleurs, pour ne pas repeter une icone
-// placeholder identique sur des dizaines de cartes. Tape dessus l'ajoute
-// directement a la collection (quickAddToCollectionAction).
-export function DiscoverSection({ perfumes }: { perfumes: ReferencePerfume[] }) {
-  const [pending, startTransition] = useTransition();
+// placeholder identique sur des dizaines de cartes. Tape dessus -> ouvre la
+// fiche complete (ReferencePerfumeSheet), qui laisse choisir collection
+// et/ou wishlist(s) avant d'ecrire quoi que ce soit.
+export function DiscoverSection({
+  perfumes,
+  wishlists,
+}: {
+  perfumes: ReferencePerfume[];
+  wishlists: { id: number; name: string }[];
+}) {
+  const [selected, setSelected] = useState<ReferencePerfume | null>(null);
 
   if (perfumes.length === 0) return null;
-
-  function handleAdd(url: string) {
-    startTransition(async () => {
-      try {
-        await quickAddToCollectionAction(url);
-        toast.success("Ajoute a ta collection");
-      } catch {
-        toast.error("Impossible d'ajouter ce parfum");
-      }
-    });
-  }
 
   return (
     <section className="flex flex-col gap-3">
@@ -35,9 +30,8 @@ export function DiscoverSection({ perfumes }: { perfumes: ReferencePerfume[] }) 
         {perfumes.map((p) => (
           <button
             key={p.fragranticaUrl}
-            onClick={() => handleAdd(p.fragranticaUrl)}
-            disabled={pending}
-            className="flex w-36 shrink-0 flex-col items-start gap-2 rounded-xl border border-border p-3 text-left transition-colors hover:bg-muted disabled:opacity-50"
+            onClick={() => setSelected(p)}
+            className="flex w-36 shrink-0 flex-col items-start gap-2 rounded-xl border border-border p-3 text-left transition-colors hover:bg-muted"
           >
             <div className="flex size-9 items-center justify-center rounded-full bg-muted text-muted-foreground">
               <Droplet className="size-4" />
@@ -46,12 +40,15 @@ export function DiscoverSection({ perfumes }: { perfumes: ReferencePerfume[] }) 
               <p className="line-clamp-2 text-sm font-medium leading-tight">{p.name}</p>
               <p className="line-clamp-1 text-xs text-muted-foreground">{p.brand}</p>
             </div>
-            <span className="flex items-center gap-1 text-xs text-primary">
-              {pending ? <Loader2 className="size-3 animate-spin" /> : <Plus className="size-3" />} Ajouter
-            </span>
           </button>
         ))}
       </div>
+
+      <ReferencePerfumeSheet
+        perfume={selected}
+        wishlists={wishlists}
+        onOpenChange={(open) => !open && setSelected(null)}
+      />
     </section>
   );
 }

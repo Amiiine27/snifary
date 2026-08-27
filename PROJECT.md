@@ -252,6 +252,20 @@ taux de succes faible (~10-15% en test manuel) mais aucun faux positif
 constate — mieux vaut ne pas
 trouver d'image que d'en attribuer une fausse a la mauvaise fiche.
 
+**Prix et description : filet de rattrapage dans `PerfumeDetailSheet`.**
+Consequence directe de tout ce qui precede : ni le dataset local ni
+Fragrantica ne donnent de prix, et la description Wikipedia ne touche
+qu'une petite partie des fiches — beaucoup de parfums ajoutes via la
+recherche/Decouvrir/pages marque se retrouvent donc sans les deux. Plutot
+que d'aller chercher une source de prix qui n'existe pas gratuitement,
+`PerfumeDetailSheet` affiche desormais un champ Prix et un champ
+Description **modifiables pour n'importe quel parfum** (pas seulement les
+fiches manuelles comme le bouton "Modifier" complet) —
+`updatePerfumeExtrasAction` fait un simple `UPDATE`, meme acceptation que
+`updateManualPerfumeAction` (`perfumes` sans colonne `createdBy`, n'importe
+quel utilisateur connecte peut corriger). Corrige a la fois les fiches deja
+en base et celles a venir.
+
 **Saisons/jour-nuit NON scrapables** : le widget "When To Wear" de Fragrantica
 (`<seasons-rating-new>`) est rendu 100% cote client par Vue, aucune donnee
 dans le HTML statique (verifie en profondeur, y compris apres scroll/lazy-load).
@@ -370,21 +384,31 @@ garder si on retouche cette config, sans quoi le bug revient silencieusement.
   `userPreferences.genderPreference` (reglable dans Profil, defaut
   `unisexe` = pas de filtre), en excluant ce que l'utilisateur possede deja.
   Jamais d'image (le dataset n'en a pas) — cartes compactes en scroll
-  horizontal plutot que le grid a vignettes utilise ailleurs. Tape dessus ->
-  `quickAddToCollectionAction` (resolve + save + ajout collection en un
-  aller-retour serveur, meme logique que la recherche mais sans target
-  wishlist possible — toujours la collection). Puis apercu de chaque section
-  (collection d'abord, puis chaque wishlist dans l'ordre de `position`), lien
-  "voir tout" vers la page dediee. Bouton "+ Nouvelle wishlist" en bas.
+  horizontal plutot que le grid a vignettes utilise ailleurs. Puis apercu de
+  chaque section (collection d'abord, puis chaque wishlist dans l'ordre de
+  `position`), lien "voir tout" vers la page dediee. Bouton "+ Nouvelle
+  wishlist" en bas.
 - `app/(app)/brands/[brand]/page.tsx` — catalogue complet d'une marque, tire
   du meme dataset local (`getBrandCatalog`, comparaison de marque insensible
   a la casse). Atteinte en tapant le nom de la marque (devenu lien) dans
   `PerfumeDetailSheet`. Vue dediee `components/brand-catalog-view.tsx` (pas
   `LibrarySectionView`, pensee pour des items **possedes** avec notes/tags —
   incompatible avec des lignes du dataset qui n'ont ni l'un ni l'autre) :
-  recherche texte + filtre genre en local (pas de tags dans ce dataset),
-  tape sur une ligne = `quickAddToCollectionAction`, toujours vers la
-  collection.
+  recherche texte + filtre genre en local (pas de tags dans ce dataset).
+- **Decouvrir et les pages marque n'ajoutent jamais directement** : tape sur
+  un parfum -> `ReferencePerfumeSheet` (`components/reference-perfume-sheet.tsx`)
+  affiche sa fiche complete (notes, genre) avec deux champs optionnels
+  prix/description, et des cases a cocher "Ma collection" + une par wishlist
+  — **plusieurs cibles possibles a la fois**, contrairement au reste de
+  l'app. Le vrai bouton d'ecriture est explicitement mis en avant
+  (`size="lg"`, pleine largeur, pas un simple lien texte) — demande
+  explicite apres un premier essai juge trop discret. `saveReferencePerfumeAction`
+  (`lib/actions/perfumes.ts`) resout + ecrit le parfum une seule fois puis
+  boucle sur les cibles cochees (`collection_items` + `addItemToWishlistAction`
+  par wishlist, qui verifie deja la propriete). Une premiere version
+  (`quickAddToCollectionAction`, supprimee) ajoutait direct a la collection
+  au tap — corrige suite a un retour explicite : pas de moyen de choisir une
+  wishlist, ni de voir la fiche avant d'ecrire quoi que ce soit.
 - `app/(app)/library/collection/page.tsx` et
   `app/(app)/library/wishlist/[id]/page.tsx` — vue complete d'**une seule**
   section a la fois (`components/library-section-view.tsx`, partage) :
