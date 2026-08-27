@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { NotesRow } from "@/components/perfume-detail-sheet";
+import { SimilarPerfumesSection } from "@/components/similar-perfumes-section";
 
 // Fiche d'un parfum pas encore dans `perfumes` (issu de Decouvrir ou d'une
 // page marque, donc de fragrantica_reference). Contrairement a l'ancien
@@ -22,16 +23,28 @@ export function ReferencePerfumeSheet({
   perfume,
   wishlists,
   onOpenChange,
+  onSelectSimilar,
 }: {
   perfume: ReferencePerfume | null;
   wishlists: { id: number; name: string }[];
   onOpenChange: (open: boolean) => void;
+  // Permet a "Vous pourriez aimer" de remplacer le parfum affiche sans
+  // fermer la sheet -- par defaut, retombe sur onOpenChange(true) + le
+  // parent devra gerer via son propre setSelected (voir DiscoverSection
+  // etc., qui passent directement leur setter).
+  onSelectSimilar?: (perfume: ReferencePerfume) => void;
 }) {
   return (
     <Sheet open={perfume !== null} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="top-16 flex flex-col overflow-hidden rounded-t-2xl">
         {perfume && (
-          <Body perfume={perfume} wishlists={wishlists} onSaved={() => onOpenChange(false)} />
+          <Body
+            key={perfume.fragranticaUrl}
+            perfume={perfume}
+            wishlists={wishlists}
+            onSaved={() => onOpenChange(false)}
+            onSelectSimilar={onSelectSimilar}
+          />
         )}
       </SheetContent>
     </Sheet>
@@ -42,10 +55,12 @@ function Body({
   perfume,
   wishlists,
   onSaved,
+  onSelectSimilar,
 }: {
   perfume: ReferencePerfume;
   wishlists: { id: number; name: string }[];
   onSaved: () => void;
+  onSelectSimilar?: (perfume: ReferencePerfume) => void;
 }) {
   const [pending, startTransition] = useTransition();
   const [price, setPrice] = useState("");
@@ -134,6 +149,19 @@ function Body({
             </label>
           ))}
         </div>
+
+        {onSelectSimilar && (
+          <SimilarPerfumesSection
+            source={{
+              name: perfume.name,
+              brand: perfume.brand,
+              gender: perfume.gender,
+              notes: perfume.notes,
+              excludeFragranticaUrl: perfume.fragranticaUrl,
+            }}
+            onSelect={onSelectSimilar}
+          />
+        )}
       </div>
 
       <div className="shrink-0 border-t border-border px-4 py-4">

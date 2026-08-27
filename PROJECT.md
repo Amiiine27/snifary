@@ -266,6 +266,42 @@ fiches manuelles comme le bouton "Modifier" complet) —
 quel utilisateur connecte peut corriger). Corrige a la fois les fiches deja
 en base et celles a venir.
 
+**"Vous pourriez aimer" (`getSimilarPerfumes`, `lib/perfumes.ts`), sur
+TOUTES les fiches parfum** (possedees via `PerfumeDetailSheet`, ou pas
+encore ajoutees via `ReferencePerfumeSheet`) : recommandations tirees de
+`fragrantica_reference`, jamais d'IA/embeddings — scoring explicable sur
+des faits reels via `components/similar-perfumes-section.tsx` ->
+`getSimilarPerfumesAction` : +3 meme marque, +3 supplementaires si meme
+"gamme" probable (`productLine()`, qui retire concentration/annee du nom
+pour reperer les flankers d'une meme ligne, ex. "Sauvage Eau de Parfum" et
+"Sauvage Elixir" -> "sauvage"), +1 par note en commun (top/heart/base
+confondus), +0.5 si le genre correspond (ou que l'un des deux est
+unisexe). Jamais un parfum deja possede par l'utilisateur (section de
+decouverte, pas un rappel de la collection), ni le parfum lui-meme. Section
+masquee entierement si rien ne depasse un score de zero — jamais de
+remplissage avec des resultats sans rapport.
+
+**Piege deja corrige** : la premiere version faisait un seul `SELECT ...
+WHERE (meme marque OR au moins une note commune) LIMIT 500` — sur 24k
+lignes, des notes courantes (musk, vanilla, bergamot...) matchent des
+milliers de parfums, et la limite unique se remplissait entierement de
+correspondances par note avant meme d'atteindre les lignes de la marque
+source (bien plus rares) : aucun flanker de la meme ligne ne remontait
+jamais, meme pour un parfum aussi connu que Sauvage. Corrige en deux
+requetes separees (marque, puis notes), chacune avec sa propre limite,
+fusionnees avant le scoring.
+
+`ReferencePerfumeSheet` accepte un `onSelectSimilar` optionnel : taper sur
+une recommandation remplace le parfum affiche dans la meme sheet (le
+composant `Body` est garde par `key={perfume.fragranticaUrl}` pour forcer
+un vrai remount — sinon les champs prix/description conserveraient les
+valeurs tapees pour le parfum precedent). Depuis `PerfumeDetailSheet`
+(parfum possede), une recommandation ouvre forcement un
+`ReferencePerfumeSheet` a la place (jamais un autre `PerfumeDetailSheet` :
+le filtre "jamais possede" du scoring garantit que ce sera toujours un
+parfum pas encore ajoute) — `LibrarySectionView` gere donc deux sheets en
+parallele (`selected` et `selectedSimilar`) et bascule de l'un a l'autre.
+
 **Saisons/jour-nuit NON scrapables** : le widget "When To Wear" de Fragrantica
 (`<seasons-rating-new>`) est rendu 100% cote client par Vue, aucune donnee
 dans le HTML statique (verifie en profondeur, y compris apres scroll/lazy-load).

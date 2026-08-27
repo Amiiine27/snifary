@@ -143,6 +143,7 @@ export function DiscoverPageView({
         perfume={selected}
         wishlists={wishlists}
         onOpenChange={(open) => !open && setSelected(null)}
+        onSelectSimilar={setSelected}
       />
     </div>
   );

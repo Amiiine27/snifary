@@ -30,6 +30,7 @@ export default async function StatsPage() {
       target={{ kind: "collection" }}
       prevHref={null}
       nextHref={wishlists.length > 0 ? sectionHref(wishlists[0]) : null}
+      wishlists={wishlists.map((w) => ({ id: w.id, name: w.name }))}
     />
   );
 }

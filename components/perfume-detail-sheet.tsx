@@ -20,6 +20,8 @@ import {
   removeItemFromWishlistAction,
 } from "@/lib/actions/wishlists";
 import { updatePerfumeExtrasAction } from "@/lib/actions/perfumes";
+import { SimilarPerfumesSection } from "@/components/similar-perfumes-section";
+import type { ReferencePerfume } from "@/lib/perfumes";
 
 const TAG_ICON: Record<string, React.ElementType> = {
   printemps: Flower2,
@@ -47,15 +49,29 @@ export function PerfumeDetailSheet({
   perfume,
   context,
   onOpenChange,
+  onSelectSimilar,
 }: {
   perfume: PerfumeDetails | null;
   context: Context | null;
   onOpenChange: (open: boolean) => void;
+  // "Vous pourriez aimer" ne recommande jamais un parfum deja possede (voir
+  // getSimilarPerfumes) : le resultat est toujours un ReferencePerfume pas
+  // encore ajoute, donc a faire remonter vers un ReferencePerfumeSheet cote
+  // parent plutot que de rouvrir ce meme composant.
+  onSelectSimilar?: (perfume: ReferencePerfume) => void;
 }) {
   return (
     <Sheet open={perfume !== null} onOpenChange={onOpenChange}>
       <SheetContent side="bottom" className="top-16 flex flex-col overflow-hidden rounded-t-2xl">
-        {perfume && context && <DetailBody perfume={perfume} context={context} onClose={() => onOpenChange(false)} />}
+        {perfume && context && (
+          <DetailBody
+            key={perfume.id}
+            perfume={perfume}
+            context={context}
+            onClose={() => onOpenChange(false)}
+            onSelectSimilar={onSelectSimilar}
+          />
+        )}
       </SheetContent>
     </Sheet>
   );
@@ -65,10 +81,12 @@ function DetailBody({
   perfume,
   context,
   onClose,
+  onSelectSimilar,
 }: {
   perfume: PerfumeDetails;
   context: Context;
   onClose: () => void;
+  onSelectSimilar?: (perfume: ReferencePerfume) => void;
 }) {
   const [pending, startTransition] = useTransition();
   const [note, setNote] = useState(context.kind === "collection" ? context.personalNote ?? "" : "");
@@ -224,6 +242,19 @@ function DetailBody({
               </Button>
             )}
           </div>
+        )}
+
+        {onSelectSimilar && (
+          <SimilarPerfumesSection
+            source={{
+              name: perfume.name,
+              brand: perfume.brand,
+              gender: perfume.gender,
+              notes: perfume.notes,
+              excludeFragranticaUrl: perfume.fragranticaUrl,
+            }}
+            onSelect={onSelectSimilar}
+          />
         )}
       </div>
 

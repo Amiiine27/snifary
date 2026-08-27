@@ -3,9 +3,10 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Grid2x2, List } from "lucide-react";
-import type { PerfumeDetails } from "@/lib/perfumes";
+import type { PerfumeDetails, ReferencePerfume } from "@/lib/perfumes";
 import { PerfumeCard } from "@/components/perfume-card";
 import { PerfumeDetailSheet } from "@/components/perfume-detail-sheet";
+import { ReferencePerfumeSheet } from "@/components/reference-perfume-sheet";
 import { AddFab } from "@/components/add-fab";
 import { FiltersSheet, EMPTY_FILTERS, type LibraryFilters } from "@/components/filters-sheet";
 import { cn } from "@/lib/utils";
@@ -21,6 +22,7 @@ export function LibrarySectionView({
   target,
   prevHref,
   nextHref,
+  wishlists,
 }: {
   title: string;
   aside?: React.ReactNode;
@@ -28,10 +30,15 @@ export function LibrarySectionView({
   target: Target;
   prevHref: string | null;
   nextHref: string | null;
+  wishlists: { id: number; name: string }[];
 }) {
   const [view, setView] = useState<"grid" | "list">("grid");
   const [filters, setFilters] = useState<LibraryFilters>(EMPTY_FILTERS);
   const [selected, setSelected] = useState<LibraryItem | null>(null);
+  // "Vous pourriez aimer" depuis une fiche possedee ouvre toujours un parfum
+  // pas encore ajoute (voir getSimilarPerfumes) -- state separe plutot que de
+  // reutiliser `selected`, qui suppose un LibraryItem (itemId, personalNote).
+  const [selectedSimilar, setSelectedSimilar] = useState<ReferencePerfume | null>(null);
 
   const filtered = useMemo(
     () =>
@@ -47,27 +54,27 @@ export function LibrarySectionView({
     <div className="flex flex-col gap-5 px-4 pt-4">
       {aside && <div className="flex flex-wrap justify-center gap-2">{aside}</div>}
 
-      {target.kind === "wishlist" ? (
-        <div className="flex items-center justify-between">
-          <Link
-            href={prevHref ?? "#"}
-            aria-disabled={!prevHref}
-            className={cn("p-1.5", !prevHref && "pointer-events-none opacity-30")}
-          >
-            <ChevronLeft className="size-6" />
-          </Link>
-          <h1 className="font-heading text-2xl">{title}</h1>
-          <Link
-            href={nextHref ?? "#"}
-            aria-disabled={!nextHref}
-            className={cn("p-1.5", !nextHref && "pointer-events-none opacity-30")}
-          >
-            <ChevronRight className="size-6" />
-          </Link>
-        </div>
-      ) : (
-        <h1 className="text-center font-heading text-2xl">{title}</h1>
-      )}
+      {/* Chevrons toujours affiches (pas seulement pour les wishlists) : depuis
+          que l'icone "Wishlists" a quitte la bottom nav, cette fleche "next"
+          -- deja calculee cote serveur mais jamais rendue avant -- est
+          devenue le seul chemin vers les wishlists depuis la collection. */}
+      <div className="flex items-center justify-between">
+        <Link
+          href={prevHref ?? "#"}
+          aria-disabled={!prevHref}
+          className={cn("p-1.5", !prevHref && "pointer-events-none opacity-30")}
+        >
+          <ChevronLeft className="size-6" />
+        </Link>
+        <h1 className="font-heading text-2xl">{title}</h1>
+        <Link
+          href={nextHref ?? "#"}
+          aria-disabled={!nextHref}
+          className={cn("p-1.5", !nextHref && "pointer-events-none opacity-30")}
+        >
+          <ChevronRight className="size-6" />
+        </Link>
+      </div>
 
       <div className="flex items-center justify-between">
         <FiltersSheet filters={filters} onChange={setFilters} />
@@ -118,6 +125,17 @@ export function LibrarySectionView({
             : null
         }
         onOpenChange={(open) => !open && setSelected(null)}
+        onSelectSimilar={(p) => {
+          setSelected(null);
+          setSelectedSimilar(p);
+        }}
+      />
+
+      <ReferencePerfumeSheet
+        perfume={selectedSimilar}
+        wishlists={wishlists}
+        onOpenChange={(open) => !open && setSelectedSimilar(null)}
+        onSelectSimilar={setSelectedSimilar}
       />
 
       <AddFab target={target} />

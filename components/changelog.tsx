@@ -2,6 +2,13 @@
 // Version la plus recente en premier.
 const CHANGELOG: { version: string; changes: string[] }[] = [
   {
+    version: "1.12",
+    changes: [
+      "Section \"Vous pourriez aimer\" sur chaque fiche parfum : suggestions selon la marque, la gamme et les notes en commun",
+      "Correctif : la fleche vers les wishlists depuis Collection ne s'affichait pas",
+    ],
+  },
+  {
     version: "1.11",
     changes: [
       "Nouvelle page Decouvrir (remplace l'icone Wishlists) : 30 suggestions, recherche libre, bouton pour tirer une nouvelle selection",

@@ -215,6 +215,109 @@ export async function searchReferencePerfumes(query: string, limit = 30): Promis
   return rows.map(toReferencePerfume);
 }
 
+// Reduit un nom a sa "gamme" probable pour reperer des flankers de la meme
+// ligne (ex: "Sauvage Eau de Parfum" et "Sauvage Elixir" -> "sauvage") en
+// retirant les mentions de concentration/annee -- jamais comparee qu'a
+// l'interieur d'une meme marque (voir getSimilarPerfumes), donc pas besoin
+// d'etre plus precis que ça.
+function productLine(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\beau de (parfum|toilette|cologne)\b/g, " ")
+    .replace(/\b(elixir|extrait|parfum|cologne|le parfum)\b/g, " ")
+    .replace(/\b(19|20)\d{2}\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+export type SimilarPerfumeSource = {
+  name: string;
+  brand: string;
+  gender: "homme" | "femme" | "unisexe";
+  notes: { top: string[]; heart: string[]; base: string[] };
+  excludeFragranticaUrl: string | null;
+};
+
+// "Vous pourriez aimer" sur chaque fiche parfum (deja possede ou pas encore).
+// Scoring simple et explicable sur des faits reels -- pas d'IA/embeddings,
+// juste ce qu'on peut justifier : meme marque, meme "gamme" probable
+// (`productLine`), notes en commun (top/heart/base confondus), un leger bonus
+// si le genre correspond. Candidats tires de `fragrantica_reference` (meme
+// marque OU au moins une note commune), jamais ce que l'utilisateur possede
+// deja -- c'est une section de decouverte, pas un rappel de sa collection.
+export async function getSimilarPerfumes(
+  source: SimilarPerfumeSource,
+  userId: string,
+  limit = 8
+): Promise<ReferencePerfume[]> {
+  const allNotes = [...source.notes.top, ...source.notes.heart, ...source.notes.base].slice(0, 12);
+
+  const noteConditions = allNotes.map((n) => {
+    const term = `%${n}%`;
+    return or(
+      like(fragranticaReference.notesTop, term),
+      like(fragranticaReference.notesHeart, term),
+      like(fragranticaReference.notesBase, term)
+    );
+  });
+
+  // Deux requetes separees plutot qu'un seul OR limite : des notes courantes
+  // (musk, vanilla, bergamot...) matchent des milliers de lignes sur 24k, et
+  // un LIMIT unique sur l'ensemble laissait la partie "meme marque" (bien
+  // plus rare) se faire evincer avant meme d'etre scoree -- verifie en test,
+  // aucun resultat de la marque source ne remontait jamais.
+  const [owned, brandCandidates, noteCandidates] = await Promise.all([
+    db
+      .select({ url: perfumes.fragranticaUrl })
+      .from(collectionItems)
+      .innerJoin(perfumes, eq(perfumes.id, collectionItems.perfumeId))
+      .where(eq(collectionItems.userId, userId)),
+    db
+      .select()
+      .from(fragranticaReference)
+      .where(sql`lower(${fragranticaReference.brand}) = lower(${source.brand})`)
+      .limit(300),
+    noteConditions.length > 0
+      ? db.select().from(fragranticaReference).where(or(...noteConditions)).limit(300)
+      : Promise.resolve([]),
+  ]);
+  const ownedUrls = new Set(owned.map((o) => o.url).filter((u): u is string => u !== null));
+
+  const seenUrls = new Set<string>();
+  const candidates = [...brandCandidates, ...noteCandidates].filter((row) => {
+    if (seenUrls.has(row.fragranticaUrl)) return false;
+    seenUrls.add(row.fragranticaUrl);
+    return true;
+  });
+
+  const sourceNotesLower = new Set(allNotes.map((n) => n.toLowerCase()));
+  const sourceLine = productLine(source.name);
+  const sourceBrandLower = source.brand.toLowerCase();
+
+  const scored: { row: (typeof candidates)[number]; score: number }[] = [];
+  for (const row of candidates) {
+    if (source.excludeFragranticaUrl && row.fragranticaUrl === source.excludeFragranticaUrl) continue;
+    if (ownedUrls.has(row.fragranticaUrl)) continue;
+
+    const sameBrand = row.brand.toLowerCase() === sourceBrandLower;
+    let score = 0;
+    if (sameBrand) {
+      score += 3;
+      if (productLine(row.name) === sourceLine) score += 3;
+    }
+
+    const rowNotes = [...splitNotesList(row.notesTop), ...splitNotesList(row.notesHeart), ...splitNotesList(row.notesBase)];
+    score += rowNotes.filter((n) => sourceNotesLower.has(n.toLowerCase())).length;
+
+    if (row.gender === source.gender || row.gender === "unisexe" || source.gender === "unisexe") score += 0.5;
+
+    if (score > 0) scored.push({ row, score });
+  }
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit).map((s) => toReferencePerfume(s.row));
+}
+
 export async function listCollection(userId: string): Promise<
   { itemId: number; personalNote: string | null; perfume: PerfumeDetails }[]
 > {

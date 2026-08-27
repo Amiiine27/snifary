@@ -12,6 +12,8 @@ export default async function CollectionPage() {
       ? collection.items.map((i) => ({ itemId: i.itemId, perfume: i.perfume, personalNote: i.personalNote }))
       : [];
 
+  const wishlists = sections.filter((s) => s.kind === "wishlist").map((s) => ({ id: s.id, name: s.name }));
+
   return (
     <LibrarySectionView
       title={collection.name}
@@ -19,6 +21,7 @@ export default async function CollectionPage() {
       target={{ kind: "collection" }}
       prevHref={null}
       nextHref={sections.length > 1 ? sectionHref(sections[1]) : null}
+      wishlists={wishlists}
     />
   );
 }

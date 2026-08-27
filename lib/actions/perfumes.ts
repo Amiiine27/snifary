@@ -23,6 +23,8 @@ import {
   findReferenceByUrl,
   getDiscoverPerfumes,
   getUserGenderPreference,
+  getSimilarPerfumes,
+  type SimilarPerfumeSource,
 } from "@/lib/perfumes";
 import { addItemToWishlistAction } from "@/lib/actions/wishlists";
 
@@ -47,6 +49,15 @@ export async function searchDiscoverPerfumesAction(query: string) {
   const trimmed = query.trim();
   if (trimmed.length < 2) return [];
   return searchReferencePerfumes(trimmed);
+}
+
+// "Vous pourriez aimer" -- affichee sur toutes les fiches parfum (possedees
+// ou pas encore). `source` vient soit d'un PerfumeDetails deja en base, soit
+// d'un ReferencePerfume pas encore ajoute : les deux ont deja la meme forme
+// {name, brand, gender, notes}, pas de conversion necessaire cote appelant.
+export async function getSimilarPerfumesAction(source: SimilarPerfumeSource) {
+  const user = await requireUser();
+  return getSimilarPerfumes(source, user.id);
 }
 
 // Nouveau tirage aleatoire sans quitter /discover (bouton "Autre selection").

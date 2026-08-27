@@ -29,6 +29,7 @@ export default async function WishlistPage({ params }: { params: Promise<{ id: s
       target={{ kind: "wishlist", wishlistId }}
       prevHref={index > 0 ? sectionHref(wishlists[index - 1]) : null}
       nextHref={index + 1 < wishlists.length ? sectionHref(wishlists[index + 1]) : null}
+      wishlists={wishlists.map((w) => ({ id: w.id, name: w.name }))}
     />
   );
 }
