@@ -84,7 +84,9 @@ schema actuel suffit toujours.
   scraping/de la saisie manuelle), jamais duplique. id, name, brand,
   `imagePublicId` (Cloudinary public_id **uniquement**, jamais l'URL complete —
   portabilite future), `fragranticaUrl` (nullable — null pour une saisie
-  manuelle), price (real, nullable), volumeMl (defaut 100), concentration
+  manuelle), `inspiredBy` (nullable — non-null = c'est un "clone"/dupe,
+  precise de quel parfum original il s'inspire, saisi uniquement via le
+  formulaire manuel), price (real, nullable), volumeMl (defaut 100), concentration
   (enum `edt|edp|parfum|extrait|cologne`, nullable, CHECK), gender (enum
   `homme|femme|unisexe`, defaut `unisexe`, CHECK), createdAt
 - **`notes`** — referentiel des notes olfactives, chaque nom unique
@@ -107,10 +109,16 @@ schema actuel suffit toujours.
 Migrations : `drizzle/*.sql` + `drizzle/meta/`. **Attention** : `drizzle-kit
 push` a deja echoue une fois sur Turso pour un `ALTER TABLE ADD COLUMN NOT
 NULL` sans DEFAULT (SQLite l'interdit) — toujours donner un `.default(...)`
-explicite a une nouvelle colonne `notNull()` ajoutee apres coup. Si `push`
-renvoie une erreur `SQL_INPUT_ERROR` louche sur un batch, envisager d'appliquer
-le SQL a la main via un script `@libsql/client` ponctuel (deja fait une fois,
-cf historique git) plutot que de s'acharner sur `push`.
+explicite a une nouvelle colonne `notNull()` ajoutee apres coup. **`drizzle-kit
+push` echoue de facon fiable et repetee sur ce projet** (`SQL_INPUT_ERROR: no
+such column` sur un batch, meme pour un simple `ALTER TABLE ADD COLUMN`
+nullable sans rien de special) — deja arrive au moins 3 fois independamment,
+pas un incident isole. Le reflexe a prendre direct, sans reperdre de temps a
+relancer `push` : lancer `drizzle-kit generate` pour obtenir le SQL exact,
+puis l'executer a la main via un script `@libsql/client` ponctuel (voir
+plusieurs occurrences dans l'historique git), puis supprimer le script. Le
+fichier de migration genere reste utile (trace/versioning), seul `push`
+lui-meme est peu fiable ici.
 
 Commande (toujours prefixee ainsi, `dotenv` ne charge pas `.env.local` tout seul) :
 ```bash
@@ -218,11 +226,35 @@ Snifary, mais a garder en tete si on refait du scraping cible sur ce site.
    traitement (le fetch cross-origin de leur CDN depuis le navigateur serait
    fragile) — extension possible plus tard en ajoutant un choix d'image
    optionnel dans l'etape de confirmation d'un brouillon scrape.
+6. Champ "Clone" dans `ManualForm` : checkbox qui, si cochee, affiche un champ
+   texte libre stockant dans `perfumes.inspiredBy` le nom du parfum original
+   dont ce clone/dupe s'inspire. Uniquement dans le formulaire manuel (n'a pas
+   de sens pour un parfum scrape, qui EST deja la fiche originale).
+7. Un parfum saisi manuellement (`fragranticaUrl === null`) est modifiable a
+   posteriori : bouton "Modifier" dans `PerfumeDetailSheet` (visible seulement
+   si `fragranticaUrl === null`) -> `EditPerfumeDialog`, qui reutilise
+   **le meme composant `ManualForm`** (exporte depuis `add-perfume-dialog.tsx`)
+   pre-rempli via sa prop `initial`, mais appelle `updateManualPerfumeAction`
+   au lieu de `createManualPerfumeAction`. Cette action **remplace entierement**
+   les notes/tags existants (delete + re-insert) plutot que de diffier — plus
+   simple, suffisant a ce volume. Comme `perfumes` n'a pas de colonne
+   `createdBy`, n'importe quel utilisateur connecte peut editer une fiche
+   manuelle existante ; accepte comme limite connue a l'echelle de ce projet.
 
 Dans tous les cas, l'ajout au final n'est **jamais global** : `perfumes` est un
 cache partage (le meme parfum, meme id, pour tout le monde), mais posseder ce
 parfum est toujours une ligne separee dans `collection_items`/`wishlist_items`
 liee au `userId` de qui a fait l'ajout.
+
+**Bouton "+" different selon le contexte** (`components/add-fab.tsx`) : dans
+la collection, un seul choix a du sens -> bouton simple qui ouvre direct
+`AddPerfumeDialog`. Dans une wishlist, le "+" se deploie en 2 options (ajouter
+un parfum / creer une nouvelle wishlist) car les deux actions sont legitimes
+depuis cet ecran. Meme logique pour les fleches precedent/suivant de
+`LibrarySectionView` : elles n'existent que pour `target.kind === "wishlist"`
+(navigation entre wishlists entre elles) — la collection n'a jamais de fleches,
+demande explicite pour ne pas suggerer un lien navigable vers les wishlists
+depuis la collection.
 
 ## Navigation / structure des pages
 
