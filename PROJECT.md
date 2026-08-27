@@ -302,6 +302,18 @@ le filtre "jamais possede" du scoring garantit que ce sera toujours un
 parfum pas encore ajoute) — `LibrarySectionView` gere donc deux sheets en
 parallele (`selected` et `selectedSimilar`) et bascule de l'un a l'autre.
 
+**Piege deja corrige (scroll horizontal casse sur mobile)** : la rangee de
+`SimilarPerfumesSection` vit toujours a l'interieur du conteneur
+`overflow-y-auto` d'une sheet (voir section detail plus bas) — deux zones
+de scroll perpendiculaires imbriquees, un cas classique ou le navigateur
+mobile capte le swipe pour le scroll vertical du parent au lieu de le
+laisser a la rangee horizontale. Corrige en ajoutant explicitement
+`touch-action: pan-x` et `overscroll-behavior-x: contain` sur la rangee
+(`[touch-action:pan-x] overscroll-x-contain` en classes Tailwind) — dit au
+navigateur que cet element gere lui-meme le pan horizontal plutot que de
+le remonter au parent. A reappliquer si une future rangee de scroll
+horizontal est ajoutee a l'interieur d'une sheet.
+
 **Saisons/jour-nuit NON scrapables** : le widget "When To Wear" de Fragrantica
 (`<seasons-rating-new>`) est rendu 100% cote client par Vue, aucune donnee
 dans le HTML statique (verifie en profondeur, y compris apres scroll/lazy-load).

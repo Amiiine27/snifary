@@ -48,7 +48,7 @@ export function SimilarPerfumesSection({
           <Loader2 className="size-4 animate-spin text-muted-foreground" />
         </p>
       ) : (
-        <div className="flex gap-3 overflow-x-auto pb-1">
+        <div className="flex gap-3 overflow-x-auto overscroll-x-contain pb-1 [touch-action:pan-x]">
           {items.map((p) => (
             <button
               key={p.fragranticaUrl}

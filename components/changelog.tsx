@@ -2,6 +2,10 @@
 // Version la plus recente en premier.
 const CHANGELOG: { version: string; changes: string[] }[] = [
   {
+    version: "1.13",
+    changes: ["Correctif : le scroll horizontal de \"Vous pourriez aimer\" ne fonctionnait pas sur mobile"],
+  },
+  {
     version: "1.12",
     changes: [
       "Section \"Vous pourriez aimer\" sur chaque fiche parfum : suggestions selon la marque, la gamme et les notes en commun",
