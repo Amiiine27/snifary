@@ -3,9 +3,8 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Search, Loader2, AlertCircle, Plus, Upload } from "lucide-react";
-import type { PerfumeCard as PerfumeCardData, ReferenceCandidate } from "@/lib/perfumes";
+import type { ReferenceCandidate } from "@/lib/perfumes";
 import {
-  searchLocalPerfumesAction,
   searchFragranticaCandidatesAction,
   resolvePerfumeAction,
   savePerfumeAction,
@@ -34,14 +33,6 @@ import {
 
 type Target = { kind: "collection" } | { kind: "wishlist"; wishlistId: number };
 type View = "search" | "manual";
-
-// Une seule liste fusionnee (plus de distinction visuelle "Deja dans
-// Snifary" / "Sur Fragrantica", voir PROJECT.md) : le dataset local a
-// desormais nom/marque/notes ET image (fimgs.net) pour la quasi-totalite des
-// parfums, la separation n'apportait plus rien.
-type UnifiedResult =
-  | { kind: "existing"; id: number; name: string; brand: string; imageUrl: string | null }
-  | { kind: "candidate"; url: string; name: string; brand: string; imageUrl: string | null };
 
 const TAG_OPTIONS = [
   { value: "printemps", label: "Printemps" },
@@ -72,9 +63,6 @@ export function AddPerfumeDialog({
   const [view, setView] = useState<View>("search");
   const [query, setQuery] = useState("");
 
-  const [localResults, setLocalResults] = useState<PerfumeCardData[] | null>(null);
-  const [localSearching, setLocalSearching] = useState(false);
-
   const [remoteResults, setRemoteResults] = useState<ReferenceCandidate[] | null>(null);
   const [remoteSearching, setRemoteSearching] = useState(false);
   const [remoteError, setRemoteError] = useState<string | null>(null);
@@ -83,30 +71,14 @@ export function AddPerfumeDialog({
 
   const queryTooShort = query.trim().length < 2;
 
-  // Recherche locale : quasi instantanee, jamais bloquee par le reseau.
-  useEffect(() => {
-    if (!open || view !== "search" || queryTooShort) return;
-    let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- etat de chargement du debounce, pattern recherche standard
-    setLocalSearching(true);
-    const timeout = setTimeout(async () => {
-      try {
-        const res = await searchLocalPerfumesAction(query);
-        if (!cancelled) setLocalResults(res);
-      } catch {
-        if (!cancelled) setLocalResults([]);
-      } finally {
-        if (!cancelled) setLocalSearching(false);
-      }
-    }, 300);
-    return () => {
-      cancelled = true;
-      clearTimeout(timeout);
-    };
-  }, [query, open, view, queryTooShort]);
-
-  // Recherche dans le dataset local (fragrantica_reference) : a part pour ne
-  // jamais bloquer l'affichage des resultats deja enregistres ci-dessus.
+  // Recherche uniquement dans le dataset local (fragrantica_reference) --
+  // plus de recherche dans les parfums deja enregistres (`perfumes`) :
+  // demande explicite, ceux-la n'ont pas tous une image garantie (ajouts
+  // manuels, ou anciens ajouts d'avant le pipeline fimgs.net), alors que le
+  // dataset en a toujours une. Consequence assumee : un parfum ajoute
+  // manuellement ou introuvable dans le dataset (ex. trop recent) ne
+  // remonte plus en recherche -- seul "Ajouter manuellement" permet de le
+  // recreer, voir canAddManually plus bas.
   useEffect(() => {
     if (!open || view !== "search" || queryTooShort) return;
     let cancelled = false;
@@ -135,7 +107,6 @@ export function AddPerfumeDialog({
   function reset() {
     setView("search");
     setQuery("");
-    setLocalResults(null);
     setRemoteResults(null);
     setRemoteError(null);
   }
@@ -148,24 +119,13 @@ export function AddPerfumeDialog({
     }
   }
 
-  function handlePickExisting(perfumeId: number) {
-    startTransition(async () => {
-      try {
-        await addPerfumeIdToTarget(perfumeId);
-        toast.success("Ajoute");
-        onOpenChange(false);
-        reset();
-      } catch {
-        toast.error("Impossible d'ajouter ce parfum");
-      }
-    });
-  }
-
-  // Aucune etape de confirmation manuelle : ni le dataset local ni Fragrantica
-  // n'exposent prix/contenance/categories de facon fiable (voir PROJECT.md),
-  // donc rien de reel a faire confirmer a l'utilisateur ici -- on ajoute
-  // directement avec les infos deja connues (genre, notes, concentration
-  // devinee depuis le nom quand possible).
+  // Aucune etape de confirmation manuelle : le dataset local n'expose pas
+  // prix/contenance/categories de facon fiable (voir PROJECT.md), donc rien
+  // de reel a faire confirmer a l'utilisateur ici -- on ajoute directement
+  // avec les infos deja connues (genre, notes, concentration devinee depuis
+  // le nom quand possible). L'image est retiree de son fond **avant**
+  // l'ajout (await, pas fire-and-forget) : jamais de flash fond blanc a
+  // l'affichage, quitte a attendre quelques secondes de plus.
   function handlePickCandidate(url: string) {
     startTransition(async () => {
       try {
@@ -183,9 +143,7 @@ export function AddPerfumeDialog({
             tags: [],
           });
           perfumeId = saved.perfumeId;
-          // Fire-and-forget : ne bloque jamais l'ajout, l'image "pop" en fond
-          // transparent quelques secondes plus tard (voir lib/refine-image.ts).
-          if (saved.isNew && saved.imageUrl) void refineNewPerfumeImage(saved.perfumeId, saved.imageUrl);
+          if (saved.isNew && saved.imageUrl) await refineNewPerfumeImage(saved.perfumeId, saved.imageUrl);
         }
         await addPerfumeIdToTarget(perfumeId);
         toast.success("Ajoute");
@@ -197,17 +155,7 @@ export function AddPerfumeDialog({
     });
   }
 
-  // Deliberement pas limite au cas "zero resultat" : une fois un premier
-  // parfum ajoute (ex. "Paradigme" en manuel), retaper le meme nom pour
-  // ajouter une AUTRE variante (ex. "Paradigme Le Parfum") le trouvait sous
-  // "Deja dans Snifary" et cachait le bouton manuel du coup -- aucun moyen
-  // d'ajouter la seconde variante sans repartir d'une recherche differente.
-  const canAddManually = !queryTooShort && !localSearching && !remoteSearching;
-
-  const merged: UnifiedResult[] = [
-    ...(localResults ?? []).map((p) => ({ kind: "existing" as const, id: p.id, name: p.name, brand: p.brand, imageUrl: p.imageUrl })),
-    ...(remoteResults ?? []).map((c) => ({ kind: "candidate" as const, url: c.url, name: c.name, brand: c.brand, imageUrl: c.imageUrl })),
-  ];
+  const canAddManually = !queryTooShort && !remoteSearching;
 
   return (
     <Dialog
@@ -238,23 +186,32 @@ export function AddPerfumeDialog({
               />
             </div>
 
+            {/* handlePickCandidate attend desormais la suppression de fond
+                (voir plus haut) : peut prendre plusieurs secondes, ce
+                message evite que l'attente silencieuse ne paraisse figee. */}
+            {pending && (
+              <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" /> Ajout en cours...
+              </p>
+            )}
+
             {!queryTooShort && (
               <div className="space-y-1.5">
-                {merged.length > 0 && (
+                {remoteResults && remoteResults.length > 0 && (
                   <div className="flex flex-col gap-1.5">
-                    {merged.map((r) => (
+                    {remoteResults.map((c) => (
                       <ResultRow
-                        key={r.kind === "existing" ? `p${r.id}` : r.url}
-                        name={r.name}
-                        brand={r.brand}
-                        imageUrl={r.imageUrl}
+                        key={c.url}
+                        name={c.name}
+                        brand={c.brand}
+                        imageUrl={c.imageUrl}
                         disabled={pending}
-                        onClick={() => (r.kind === "existing" ? handlePickExisting(r.id) : handlePickCandidate(r.url))}
+                        onClick={() => handlePickCandidate(c.url)}
                       />
                     ))}
                   </div>
                 )}
-                {(localSearching || remoteSearching) && (
+                {remoteSearching && (
                   <p className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="size-4 animate-spin" /> Recherche...
                   </p>
@@ -264,7 +221,7 @@ export function AddPerfumeDialog({
                     <AlertCircle className="size-4" /> {remoteError}
                   </p>
                 )}
-                {merged.length === 0 && !localSearching && !remoteSearching && !remoteError && (
+                {remoteResults?.length === 0 && !remoteSearching && !remoteError && (
                   <p className="text-sm text-muted-foreground">Aucun resultat</p>
                 )}
               </div>

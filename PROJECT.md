@@ -214,27 +214,29 @@ acceptee du dataset, pas un bug. Script d'import ponctuel supprime apres
 usage (meme convention que les scripts de migration Drizzle, voir plus
 haut) ; le CSV source vit hors repo.
 
-**Recherche fusionnee dans `AddPerfumeDialog`** (`components/add-perfume-dialog.tsx`) :
-plus de distinction visuelle "Deja dans Snifary" / "Sur Fragrantica" —
-`searchLocalPerfumesAction` (table `perfumes`) et
-`searchFragranticaCandidatesAction` (dataset, exclut deja les candidats dont
-l'URL correspond a un `perfumes` existant) tournent toujours en deux
-`useEffect` separes (pour que le local, quasi instantane, s'affiche sans
-attendre l'autre), mais leurs resultats sont combines en une seule liste
-`merged` cote client, chaque ligne partageant desormais `name`/`brand`/
-`imageUrl` (`ReferenceCandidate`, `lib/perfumes.ts`, image via
-`fimgsImageUrl`) — retire suite a un retour explicite : le dataset a
-desormais notes ET image pour la quasi-totalite des parfums, la separation
-n'apportait plus rien. **La recherche locale reste indispensable** (pas
-seulement fusionnee cosmetiquement) : un parfum saisi manuellement
-(`fragranticaUrl === null`, jamais dans le dataset) ou trop recent pour le
-snapshot ne serait sinon plus jamais retrouvable en recherche, cassant
-justement le cas Prada Paradigme deja corrige cette session
-(`canAddManually`, voir plus bas).
+**Recherche dans `AddPerfumeDialog` : dataset local uniquement**
+(`components/add-perfume-dialog.tsx`) — la recherche dans les parfums deja
+enregistres (`perfumes`, ex-`searchLocalPerfumesAction`/`findPerfumesByName`,
+supprimees) a ete retiree, demande explicite. Raison : contrairement au
+dataset (`fragrantica_reference`, image garantie via `fimgsImageUrl`), une
+ligne `perfumes` n'a pas forcement d'image (ajout manuel, ou ancien ajout
+d'avant le pipeline fimgs.net) — melanger les deux dans une liste au rendu
+desormais identique (nom/marque/photo, voir plus bas) rendait ce manque
+visible et incoherent. `searchFragranticaCandidatesAction` ne filtre donc
+plus les candidats deja enregistres (inutile sans recherche locale en
+parallele a dedupliquer visuellement) : un candidat deja dans `perfumes`
+reste visible, le cliquer reutilise la ligne existante
+(`resolvePerfumeAction`) plutot que d'en recreer une. **Consequence
+assumee** (**risque explicitement accepte**, pas une regression manquee) :
+un parfum ajoute manuellement (`fragranticaUrl === null`, jamais dans le
+dataset) ou trop recent pour le snapshot (ex. Prada Paradigme) redevient
+introuvable en recherche — pour lui ajouter une seconde variante, refaire
+"Ajouter manuellement" cree desormais une fiche separee plutot que de
+reutiliser la premiere.
 
 **Recherche "tous les mots, n'importe quel ordre"** (`searchWords()`,
-`lib/perfumes.ts`, factorisee et reutilisee par `findPerfumesByName`,
-`searchFragranticaReference` et `searchReferencePerfumes`) : chaque mot de
+`lib/perfumes.ts`, factorisee et reutilisee par `searchFragranticaReference`
+et `searchReferencePerfumes`) : chaque mot de
 la requete devient sa propre condition `LIKE` (nom OU marque), combinees en
 `AND` — plutot qu'un seul `LIKE '%requete entiere%'` qui exige une
 sous-chaine continue. **Piege reel corrige** : chercher "valentino born in
@@ -374,12 +376,16 @@ optimiser une URL `blob:`.
 renvoient desormais `{perfumeId, isNew, imageUrl}` (URL Cloudinary, pas juste
 le `public_id`) plutot qu'un simple id. Cote client
 (`add-perfume-dialog.tsx`, `reference-perfume-sheet.tsx`), si `isNew` et
-qu'une image a ete trouvee, `refineNewPerfumeImage` est appelee en
-**fire-and-forget** (jamais `await`, ne bloque jamais le toast "Ajoute") :
-retelecharge l'image depuis Cloudinary, la repasse dans le meme pipeline
-WASM que `ManualForm` (`removeImageBackground` -> `uploadPerfumeImageAction`
--> `updatePerfumeImageAction`), et l'image "pop" en fond transparent
-quelques secondes plus tard. **Pourquoi apres coup et pas directement dans
+qu'une image a ete trouvee, `refineNewPerfumeImage` est appelee avec
+**`await`** (pas fire-and-forget — demande explicite pour ne jamais laisser
+voir la version fond blanc, quitte a rallonger l'attente avant le toast
+"Ajoute"/"Enregistre" ; un indicateur "Ajout en cours..." couvre cette
+attente dans `AddPerfumeDialog`, `ReferencePerfumeSheet` avait deja
+"Enregistrement..." sur son bouton) : retelecharge l'image depuis
+Cloudinary, la repasse dans le meme pipeline WASM que `ManualForm`
+(`removeImageBackground` -> `uploadPerfumeImageAction` ->
+`updatePerfumeImageAction`), puis l'ajout se termine avec l'image deja en
+fond transparent. **Pourquoi apres coup et pas directement dans
 `findImageAndDescription`** : `removeImageBackground` est 100%
 navigateur/WASM (aucun equivalent Node cote serveur, voir
 `lib/remove-background.ts`), et les images trouvees automatiquement
@@ -468,18 +474,14 @@ Snifary, mais a garder en tete si on refait du scraping cible sur ce site.
 **Flow d'ajout complet** (`lib/actions/perfumes.ts`, UI dans
 `components/add-perfume-dialog.tsx`, ouvert par `components/add-fab.tsx`) :
 
-1. `searchLocalPerfumesAction` (table `perfumes`, cache Turso, quasi
-   instantane) et `searchFragranticaCandidatesAction` (dataset
-   `fragrantica_reference` uniquement desormais, voir section Scraping)
-   tournent en **parallele independant** cote UI (deux `useEffect` separes) :
-   le cache local s'affiche tout de suite, une lenteur sur le second n'affecte
-   jamais le premier. **Piege deja corrige** : sans try/catch autour de
-   l'appel, un echec laissait le spinner "Recherche..." tourner indefiniment
-   (ressemblait a "l'app est cassee"). Les deux resultats sont ensuite
-   **fusionnes en une seule liste** cote client (`merged`,
-   `add-perfume-dialog.tsx`) — plus de distinction visuelle "Deja dans
-   Snifary" / "Sur Fragrantica" (voir section Scraping pour le detail et le
-   risque ecarte).
+1. `searchFragranticaCandidatesAction` (dataset `fragrantica_reference`
+   uniquement, voir section Scraping) est desormais la **seule** recherche —
+   `searchLocalPerfumesAction` (table `perfumes`) a ete retiree, demande
+   explicite (une ligne `perfumes` n'a pas forcement d'image, incoherent
+   avec le rendu desormais identique de chaque resultat, voir section
+   Scraping pour le detail et le risque assume). **Piege deja corrige** :
+   sans try/catch autour de l'appel, un echec laissait le spinner
+   "Recherche..." tourner indefiniment (ressemblait a "l'app est cassee").
 2. `resolvePerfumeAction(url)` : cache hit (`findPerfumeByFragranticaUrl`) ->
    id direct ; sinon `fragrantica_reference` (notes deja connues, pas de
    reseau) -> brouillon **jamais ecrit en base** a ce stade ; si absent des
@@ -516,18 +518,21 @@ Snifary, mais a garder en tete si on refait du scraping cible sur ce site.
    Le Parfum" en EDP a cote du "Paradigme" parfum) — corrige suite a un cas
    reel rencontre par l'utilisateur. `canAddManually` ne depend plus que
    d'une recherche valide et stabilisee (ni trop courte, ni en cours de
-   chargement local/distant), jamais du nombre de resultats. C'est aussi ce
-   cas precis qui justifie de garder la recherche locale (`perfumes`) meme
-   apres la fusion avec le dataset (voir section Scraping) : "Paradigme"
-   (sorti en 2025) n'est pas dans le dataset (snapshot ~2024), seule la
-   recherche locale le rend retrouvable.
+   chargement), jamais du nombre de resultats. **Depuis le retrait de la
+   recherche locale** (voir section Scraping), ce meme "Paradigme" n'est
+   d'ailleurs plus retrouvable du tout en recherche (ni local ni dataset) —
+   seul le bouton manuel permet de le recreer, en toute connaissance de
+   cause (risque assume, pas re-corrige).
 5. Suppression de fond (`lib/remove-background.ts`, `@imgly/background-removal`,
    modele `isnet_quint8`, 100% navigateur/WASM, import dynamique) appliquee
-   **uniquement sur les images uploadees manuellement** (fichier local, pas de
-   souci CORS). Les images trouvees automatiquement (fimgs.net, Wikipedia,
-   Open Beauty Facts) ne passent PAS par ce traitement (fetch cross-origin
-   depuis le navigateur serait fragile, et se fait de toute facon cote
-   serveur dans `savePerfumeAction`).
+   **directement** sur les images uploadees manuellement (fichier local, pas
+   de souci CORS) au moment de l'upload. Les images trouvees automatiquement
+   (fimgs.net, Wikipedia, Open Beauty Facts) ne peuvent pas passer par ce
+   meme chemin direct (fetch cross-origin fragile/bloque depuis le
+   navigateur pour une image tierce non uploadee), mais y passent quand meme
+   **en 2 temps apres l'upload initial** cote serveur dans `savePerfumeAction`
+   — voir `refineNewPerfumeImage` (`lib/refine-image.ts`) dans la section
+   Scraping.
 6. Champ "Clone" dans `ManualForm` : checkbox qui, si cochee, affiche un champ
    texte libre stockant dans `perfumes.inspiredBy` le nom du parfum original
    dont ce clone/dupe s'inspire. Uniquement dans le formulaire manuel (n'a pas

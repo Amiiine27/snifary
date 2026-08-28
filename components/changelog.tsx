@@ -2,6 +2,13 @@
 // Version la plus recente en premier.
 const CHANGELOG: { version: string; changes: string[] }[] = [
   {
+    version: "1.25",
+    changes: [
+      "Recherche \"Ajouter un parfum\" : ne montre plus que les resultats avec photo garantie",
+      "Le fond des photos trouvees est retire avant affichage, plus de flash fond blanc",
+    ],
+  },
+  {
     version: "1.24",
     changes: [
       "Fond retire automatiquement sur les photos trouvees a l'ajout (Fragrantica, Open Beauty Facts, Wikipedia)",

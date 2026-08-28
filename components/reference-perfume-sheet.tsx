@@ -82,9 +82,10 @@ function Body({
           toCollection,
           wishlistIds,
         });
-        // Fire-and-forget : ne bloque jamais l'enregistrement, l'image "pop"
-        // en fond transparent quelques secondes plus tard (lib/refine-image.ts).
-        if (saved.isNew && saved.imageUrl) void refineNewPerfumeImage(saved.perfumeId, saved.imageUrl);
+        // Retire le fond avant de considerer l'enregistrement termine (pas
+        // fire-and-forget) : jamais de flash fond blanc a l'affichage, voir
+        // lib/refine-image.ts.
+        if (saved.isNew && saved.imageUrl) await refineNewPerfumeImage(saved.perfumeId, saved.imageUrl);
         toast.success("Enregistre");
         onSaved();
       } catch {

@@ -98,16 +98,6 @@ export async function getPerfumeDetails(perfumeId: number): Promise<PerfumeDetai
   return details;
 }
 
-export async function findPerfumesByName(query: string): Promise<PerfumeCard[]> {
-  const words = searchWords(query);
-  const rows = await db
-    .select()
-    .from(perfumes)
-    .where(and(...words.map((w) => or(like(perfumes.name, `%${w}%`), like(perfumes.brand, `%${w}%`)))))
-    .limit(10);
-  return rows.map(toCard);
-}
-
 export async function findPerfumeByFragranticaUrl(url: string) {
   const [row] = await db.select().from(perfumes).where(eq(perfumes.fragranticaUrl, url));
   return row ?? null;

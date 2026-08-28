@@ -12,7 +12,6 @@ import { uploadImageFromUrl, uploadImageFromBuffer, cloudinaryUrl } from "@/lib/
 import { findWikipediaPerfumeInfo } from "@/lib/wikipedia";
 import { findOpenBeautyFactsImage } from "@/lib/openbeautyfacts";
 import {
-  findPerfumesByName,
   findPerfumeByFragranticaUrl,
   searchFragranticaReference,
   searchReferencePerfumes,
@@ -28,16 +27,6 @@ import { addItemToWishlistAction } from "@/lib/actions/wishlists";
 type Gender = "homme" | "femme" | "unisexe";
 type Concentration = "edt" | "edp" | "parfum" | "extrait" | "cologne" | null;
 type Tag = "printemps" | "ete" | "automne" | "hiver" | "jour" | "nuit";
-
-// Etape 1a : recherche locale (cache Turso), quasi instantanee. Separee de la
-// recherche Fragrantica pour que l'utilisateur voie ces resultats tout de
-// suite sans attendre la requete reseau, plus lente et moins fiable.
-export async function searchLocalPerfumesAction(query: string) {
-  await requireUser();
-  const trimmed = query.trim();
-  if (trimmed.length < 2) return [];
-  return findPerfumesByName(trimmed);
-}
 
 // Recherche libre pour la page /discover (version detaillee de la section
 // Decouvrir de l'accueil).
@@ -64,29 +53,23 @@ export async function refreshDiscoverPerfumesAction() {
   return getDiscoverPerfumes(user.id, gender, 30);
 }
 
-// Etape 1b : propose des fiches du dataset local non encore connues. Le
-// scraping live DuckDuckGo->Fragrantica a ete retire (fragrantica.com est
-// desormais derriere un vrai challenge Cloudflare, voir lib/fragrantica.ts) --
-// le dataset `fragrantica_reference` (~24k parfums, notes + image via
-// fimgs.net) suffit maintenant a lui seul pour l'immense majorite des
-// recherches. Exclut les candidats deja enregistres (`perfumes`) : ils
-// remontent deja via searchLocalPerfumesAction, pas la peine de les montrer
-// deux fois dans une liste desormais fusionnee cote UI (plus de distinction
-// visuelle "deja dans Snifary" / "sur Fragrantica").
+// Etape 1b : propose des fiches du dataset local. Seule source de recherche
+// desormais (voir add-perfume-dialog.tsx) : la recherche dans les parfums
+// deja enregistres (`perfumes`, ex-searchLocalPerfumesAction) a ete retiree,
+// demande explicite -- ceux-la n'ont pas tous une image garantie (ajout
+// manuel, ou anciens ajouts d'avant le pipeline fimgs.net), le dataset si.
+// Consequence : plus de filtre sur les candidats deja enregistres (avant
+// utile pour eviter un doublon visuel avec la recherche locale, retiree) --
+// un candidat deja dans `perfumes` reste donc visible ici, et cliquer dessus
+// reutilise la ligne existante (resolvePerfumeAction) plutot que d'en
+// recreer une.
 export async function searchFragranticaCandidatesAction(query: string): Promise<ReferenceCandidate[]> {
   await requireUser();
   const trimmed = query.trim();
   if (trimmed.length < 2) return [];
 
   const candidates = await searchFragranticaReference(trimmed);
-
-  const knownUrls = new Set(
-    (await Promise.all(candidates.map((c) => findPerfumeByFragranticaUrl(c.url))))
-      .filter(Boolean)
-      .map((p) => p!.fragranticaUrl)
-  );
-
-  return candidates.filter((c) => !knownUrls.has(c.url)).slice(0, 20);
+  return candidates.slice(0, 20);
 }
 
 // Etape 2 : l'utilisateur choisit une fiche precise. Cache hit -> renvoie le
